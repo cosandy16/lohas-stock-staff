@@ -20,7 +20,7 @@
             <input id="symbolName" type="text" value="範例 ETF" maxlength="24" />
           </label>
 
-          <div class="fetch-box">
+		<div class="fetch-box">
             <label>
               市場
               <select id="market">
@@ -32,10 +32,13 @@
             </label>
             <label>
               股票代號
-			  <input id="symbolInput" type="text" value="2330" maxlength="18" 
-       style="font-size: 24px; width: 150px; padding: 8px; text-align: center; font-weight: bold; border: 2px solid #2c6ebd; border-radius: 6px;" />
+              <input id="symbolInput" type="text" value="2330" maxlength="18" 
+                     style="font-size: 24px; width: 100%; padding: 8px; text-align: center; font-weight: bold; border: 2px solid var(--green); border-radius: 6px;" />
             </label>
-            <button id="fetchSymbolBtn" type="button">直接抓資料</button>
+            
+            <div style="grid-column: 1 / -1; margin-top: 10px;">
+              <button id="fetchSymbolBtn" class="btn-fetch" style="width: 100%;">從 Yahoo Finance 直接抓取資料</button>
+            </div>
           </div>
           <p id="fetchStatus" class="fetch-status">台股輸入 2330；美股/ETF 輸入 AAPL、QQQ、VOO；自訂可輸入 2330.TW 或 0050.TW。</p>
 
