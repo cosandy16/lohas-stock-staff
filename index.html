@@ -20,25 +20,24 @@
             <input id="symbolName" type="text" value="範例 ETF" maxlength="24" />
           </label>
 
-		<div class="fetch-box">
-            <label>
+		<div class="fetch-box" style="display: flex; flex-direction: column; gap: 12px;">
+            <label style="display: flex; flex-direction: column; gap: 4px;">
               市場
-              <select id="market">
+              <select id="market" style="width: 100%; padding: 8px;">
                 <option value="tw" selected>台股上市</option>
                 <option value="two">台股上櫃</option>
                 <option value="us">美股/ETF</option>
                 <option value="custom">自訂 Yahoo 代號</option>
               </select>
             </label>
-            <label>
+            
+            <label style="display: flex; flex-direction: column; gap: 4px;">
               股票代號
               <input id="symbolInput" type="text" value="2330" maxlength="18" 
-                     style="font-size: 24px; width: 100%; padding: 8px; text-align: center; font-weight: bold; border: 2px solid var(--green); border-radius: 6px;" />
+                     style="font-size: 28px; width: 100%; padding: 10px; text-align: center; font-weight: bold; border: 2px solid var(--green); border-radius: 6px; background-color: #fff;" />
             </label>
             
-            <div style="grid-column: 1 / -1; margin-top: 10px;">
-              <button id="fetchSymbolBtn" class="btn-fetch" style="width: 100%;">從 Yahoo Finance 直接抓取資料</button>
-            </div>
+            <button id="fetchSymbolBtn" class="btn-fetch" style="width: 100%; margin-top: 4px;">從 Yahoo Finance 直接抓取資料</button>
           </div>
           <p id="fetchStatus" class="fetch-status">台股輸入 2330；美股/ETF 輸入 AAPL、QQQ、VOO；自訂可輸入 2330.TW 或 0050.TW。</p>
 
