@@ -80,12 +80,28 @@ def fetch_twse_stock_day(stock_no, years):
 
 
 def fetch_yahoo_stock_day(stock_no, years):
-    if not re.fullmatch(r"\d{4,6}", stock_no):
-        raise ValueError("股票代號格式不正確，請輸入 4 到 6 位數字。")
+    return fetch_yahoo_symbol(f"{stock_no}.TW", years)
 
+
+def normalize_yahoo_symbol(raw_symbol, market):
+    symbol = raw_symbol.strip().upper()
+    if not re.fullmatch(r"[A-Z0-9.^=-]{1,18}", symbol):
+        raise ValueError("股票代號格式不正確。")
+
+    if market == "tw":
+        if not re.fullmatch(r"\d{4,6}", symbol):
+            raise ValueError("台股上市請輸入 4 到 6 位數字，例如 2330。")
+        return f"{symbol}.TW"
+    if market == "two":
+        if not re.fullmatch(r"\d{4,6}", symbol):
+            raise ValueError("台股上櫃請輸入 4 到 6 位數字，例如 6488。")
+        return f"{symbol}.TWO"
+    return symbol
+
+
+def fetch_yahoo_symbol(symbol, years):
     period2 = int(time.time())
     period1 = period2 - round(float(years) * 365 * 24 * 60 * 60)
-    symbol = f"{stock_no}.TW"
     url = (
         "https://query1.finance.yahoo.com/v8/finance/chart/"
         f"{urllib.parse.quote(symbol)}?period1={period1}&period2={period2}"
@@ -110,7 +126,7 @@ def fetch_yahoo_stock_day(stock_no, years):
         rows.append({"date": row_date, "close": round(float(close), 4)})
 
     if not rows:
-        raise ValueError("查不到有效收盤價，請確認代號是否為 Yahoo 支援的上市台股。")
+        raise ValueError("查不到有效收盤價，請確認代號是否為 Yahoo Finance 支援的代號。")
     return rows
 
 
@@ -156,6 +172,19 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 data = fetch_yahoo_stock_day(stock_no, years)
                 self.send_json(200, {"symbol": f"{stock_no}.TW", "source": "Yahoo Finance", "rows": data})
+            except Exception as exc:
+                self.send_json(400, {"error": str(exc)})
+            return
+
+        if parsed.path == "/api/yahoo":
+            query = urllib.parse.parse_qs(parsed.query)
+            raw_symbol = query.get("symbol", [""])[0]
+            market = query.get("market", ["tw"])[0]
+            years = query.get("years", ["3.5"])[0]
+            try:
+                yahoo_symbol = normalize_yahoo_symbol(raw_symbol, market)
+                data = fetch_yahoo_symbol(yahoo_symbol, years)
+                self.send_json(200, {"symbol": yahoo_symbol, "source": "Yahoo Finance", "rows": data})
             except Exception as exc:
                 self.send_json(400, {"error": str(exc)})
             return

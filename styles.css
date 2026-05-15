@@ -157,7 +157,7 @@ textarea:focus {
 
 .fetch-box {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 150px;
+  grid-template-columns: 110px minmax(0, 1fr) 128px;
   gap: 10px;
   align-items: end;
 }

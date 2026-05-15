@@ -1,8 +1,9 @@
 const csvInput = document.querySelector("#csvInput");
 const fileInput = document.querySelector("#fileInput");
 const symbolName = document.querySelector("#symbolName");
-const twseSymbol = document.querySelector("#twseSymbol");
-const fetchTwseBtn = document.querySelector("#fetchTwseBtn");
+const market = document.querySelector("#market");
+const symbolInput = document.querySelector("#symbolInput");
+const fetchSymbolBtn = document.querySelector("#fetchSymbolBtn");
 const fetchStatus = document.querySelector("#fetchStatus");
 const periodYears = document.querySelector("#periodYears");
 const modelMode = document.querySelector("#modelMode");
@@ -252,14 +253,26 @@ fileInput.addEventListener("change", async () => {
   render();
 });
 
-fetchTwseBtn.addEventListener("click", async () => {
-  const stockNo = twseSymbol.value.trim();
+function displaySymbol(rawSymbol) {
+  if (market.value === "tw") return `${rawSymbol}.TW`;
+  if (market.value === "two") return `${rawSymbol}.TWO`;
+  return rawSymbol.toUpperCase();
+}
+
+fetchSymbolBtn.addEventListener("click", async () => {
+  const rawSymbol = symbolInput.value.trim();
+  const targetSymbol = displaySymbol(rawSymbol);
   fetchStatus.className = "fetch-status is-loading";
-  fetchStatus.textContent = `正在抓取 ${stockNo}.TW 的日收盤資料...`;
-  fetchTwseBtn.disabled = true;
+  fetchStatus.textContent = `正在抓取 ${targetSymbol} 的日收盤資料...`;
+  fetchSymbolBtn.disabled = true;
 
   try {
-    const response = await fetch(`/api/twse?stockNo=${encodeURIComponent(stockNo)}&years=${encodeURIComponent(fetchYears())}`);
+    const params = new URLSearchParams({
+      symbol: rawSymbol,
+      market: market.value,
+      years: fetchYears(),
+    });
+    const response = await fetch(`/api/yahoo?${params.toString()}`);
     const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload.error || "抓取資料失敗。");
@@ -273,7 +286,19 @@ fetchTwseBtn.addEventListener("click", async () => {
     fetchStatus.className = "fetch-status is-error";
     fetchStatus.textContent = error.message;
   } finally {
-    fetchTwseBtn.disabled = false;
+    fetchSymbolBtn.disabled = false;
+  }
+});
+
+market.addEventListener("change", () => {
+  if (market.value === "us") {
+    symbolInput.value = "AAPL";
+  } else if (market.value === "two") {
+    symbolInput.value = "6488";
+  } else if (market.value === "custom") {
+    symbolInput.value = "2330.TW";
+  } else {
+    symbolInput.value = "2330";
   }
 });
 

@@ -22,12 +22,21 @@
 
           <div class="fetch-box">
             <label>
-              台股代號
-              <input id="twseSymbol" type="text" value="2330" inputmode="numeric" maxlength="6" />
+              市場
+              <select id="market">
+                <option value="tw" selected>台股上市</option>
+                <option value="two">台股上櫃</option>
+                <option value="us">美股/ETF</option>
+                <option value="custom">自訂 Yahoo 代號</option>
+              </select>
             </label>
-            <button id="fetchTwseBtn" type="button">直接抓台股資料</button>
+            <label>
+              股票代號
+              <input id="symbolInput" type="text" value="2330" maxlength="18" />
+            </label>
+            <button id="fetchSymbolBtn" type="button">直接抓資料</button>
           </div>
-          <p id="fetchStatus" class="fetch-status">輸入上市股票代號，例如 2330，按下按鈕即可抓近期間日收盤價。</p>
+          <p id="fetchStatus" class="fetch-status">台股輸入 2330；美股/ETF 輸入 AAPL、QQQ、VOO；自訂可輸入 2330.TW 或 0050.TW。</p>
 
           <div class="two-columns">
             <label>
@@ -67,7 +76,7 @@
 
         <section class="panel compact">
           <h2>CSV 從哪裡來</h2>
-          <p>台股可以直接按上方按鈕抓 Yahoo Finance 日收盤資料；也可到臺灣證券交易所下載。美股/ETF 可用 Yahoo Finance 的 Historical Data 匯出。</p>
+          <p>台股與美股/ETF 都可以直接按上方按鈕抓 Yahoo Finance 日收盤資料；也可手動貼上 CSV。</p>
           <div class="source-links">
             <a href="https://wwwc.twse.com.tw/zh/trading/historical/bwibbu.html" target="_blank" rel="noreferrer">台股 CSV</a>
             <a href="https://finance.yahoo.com/" target="_blank" rel="noreferrer">Yahoo Finance</a>
