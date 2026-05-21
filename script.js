@@ -186,34 +186,55 @@ function renderChart(analysis) {
   const yTicks = Array.from({ length: 6 }, (_, index) => yMin + ((yMax - yMin) / 5) * index);
   const last = analysis[analysis.length - 1];
 
+  // 判斷是否為樂觀區 (超過 +1SD)
+  const isOptimistic = last.close >= last.plus1;
+
   const bands = `
     <path d="${linePath(analysis, xAt, (p) => y(p.plus2))} L ${linePath([...analysis].reverse(), xAt, (p) => y(p.plus1)).replace(/^M/, "L")} Z" fill="#f7dddd" opacity="0.8" />
     <path d="${linePath(analysis, xAt, (p) => y(p.plus1))} L ${linePath([...analysis].reverse(), xAt, (p) => y(p.minus1)).replace(/^M/, "L")} Z" fill="#edf3fb" opacity="0.75" />
     <path d="${linePath(analysis, xAt, (p) => y(p.minus1))} L ${linePath([...analysis].reverse(), xAt, (p) => y(p.minus2)).replace(/^M/, "L")} Z" fill="#dff1e9" opacity="0.85" />
   `;
 
-	// 在 renderChart 函式內
-	const isOptimistic = last.close >= last.plus1;
+  chart.innerHTML = `
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="股市樂活五線譜">
+      <rect width="${width}" height="${height}" rx="8" fill="#ffffff" />
+      ${yTicks
+        .map(
+          (tick) => `
+            <line x1="${margin.left}" y1="${y(tick)}" x2="${width - margin.right}" y2="${y(tick)}" stroke="#e7ebf0" />
+            <text x="${margin.left - 14}" y="${y(tick) + 4}" text-anchor="end" font-size="13" fill="#667085">${formatPrice(tick)}</text>
+          `,
+        )
+        .join("")}
+      ${bands}
+      ${levelDefs
+        .map(
+          (level) => `
+            <path d="${linePath(analysis, xAt, (p) => y(p[level.key]))}" fill="none" stroke="${level.color}" stroke-width="${level.key === "mid" ? 2.8 : 2}" />
+            <text x="${width - margin.right + 10}" y="${y(last[level.key]) + 4}" font-size="13" font-weight="800" fill="${level.color}">${level.label}</text>
+          `,
+        )
+        .join("")}
+      
+      <path d="${linePath(analysis, xAt, (p) => y(p.close))}" fill="none" stroke="#17202f" stroke-width="2.4" />
+      
+      ${/* 樂觀區 Highlight 效果 */ ""}
+      ${isOptimistic ? `
+        <circle cx="${x(analysis.length - 1)}" cy="${y(last.close)}" r="8" fill="#c94b4b" opacity="0.4">
+          <animate attributeName="r" from="8" to="20" dur="1.5s" repeatCount="indefinite" />
+          <animate attributeName="opacity" from="0.4" to="0" dur="1.5s" repeatCount="indefinite" />
+        </circle>
+      ` : ""}
 
-	chart.innerHTML = `
-		<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="股市樂活五線譜">
-		  <path d="${linePath(analysis, xAt, (p) => y(p.close))}" fill="none" stroke="#17202f" stroke-width="2.4" />
-		  
-		  ${isOptimistic ? `
-			<circle cx="${x(analysis.length - 1)}" cy="${y(last.close)}" r="8" fill="#c94b4b" opacity="0.4">
-			  <animate attributeName="r" from="8" to="20" dur="1.5s" begin="0s" repeatCount="indefinite" />
-			  <animate attributeName="opacity" from="0.4" to="0" dur="1.5s" begin="0s" repeatCount="indefinite" />
-			</circle>
-		  ` : ''}
-
-		  <circle cx="${x(analysis.length - 1)}" cy="${y(last.close)}" r="5" fill="${isOptimistic ? '#c94b4b' : '#17202f'}" />
-		  
-		  <text x="${x(analysis.length - 1) - 10}" y="${y(last.close) - 12}" 
-				text-anchor="end" font-size="14" font-weight="900" 
-				fill="${isOptimistic ? '#c94b4b' : '#17202f'}">${formatPrice(last.close)}</text>
-		  
-		  </svg>
-	`;
+      <circle cx="${x(analysis.length - 1)}" cy="${y(last.close)}" r="5" fill="${isOptimistic ? "#c94b4b" : "#17202f"}" />
+      <text x="${x(analysis.length - 1) - 10}" y="${y(last.close) - 12}" text-anchor="end" font-size="14" font-weight="900" fill="${isOptimistic ? "#c94b4b" : "#17202f"}">${formatPrice(last.close)}</text>
+      
+      <line x1="${margin.left}" y1="${height - margin.bottom}" x2="${width - margin.right}" y2="${height - margin.bottom}" stroke="#b9c2cf" />
+      <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${height - margin.bottom}" stroke="#b9c2cf" />
+      <text x="${margin.left}" y="${height - 20}" font-size="13" fill="#667085">${formatDate(analysis[0].date)}</text>
+      <text x="${width - margin.right}" y="${height - 20}" text-anchor="end" font-size="13" fill="#667085">${formatDate(last.date)}</text>
+    </svg>
+  `;
 }
 
 function render() {
@@ -222,29 +243,32 @@ function render() {
     const analysis = buildAnalysis(data);
     const latest = analysis[analysis.length - 1];
     
-    // --- 新增：判斷是否為樂觀區 ---
-    const zone = priceZone(latest);
-    zoneText.textContent = zone;
-    
-    // 如果包含 "樂觀" 字眼，字體變紅並加粗，否則恢復預設
-    if (zone.includes("樂觀")) {
-      zoneText.style.color = "#c94b4b";
-      zoneText.style.textShadow = "0 0 8px rgba(201, 75, 75, 0.3)";
-    } else {
-      zoneText.style.color = "var(--ink)";
-      zoneText.style.textShadow = "none";
-    }
-    // -------------------------
-
     chartTitle.textContent = `${symbolName.value.trim() || "未命名標的"} 樂活五線譜`;
     rangeText.textContent = `${formatDate(analysis[0].date)} ~ ${formatDate(latest.date)} · ${analysis.length} 筆資料 · ${modelMode.value === "log" ? "對數趨勢" : "線性趨勢"}`;
     
+    const zone = priceZone(latest);
+    zoneText.textContent = zone;
+    
+    // UI 文字高亮：進入樂觀區則變紅
+    if (zone.includes("樂觀")) {
+      zoneText.style.color = "#c94b4b";
+    } else {
+      zoneText.style.color = "var(--ink)";
+    }
+
     closeText.textContent = formatPrice(latest.close);
     r2Text.textContent = latest.r2.toFixed(3);
+    
     renderChart(analysis);
     renderTable(latest);
   } catch (error) {
-    // ... 原有的 error 處理邏輯
+    chart.innerHTML = `<div class="error">${error.message}</div>`;
+    chartTitle.textContent = "股市樂活五線譜";
+    rangeText.textContent = "請貼上或上傳日期、收盤價資料";
+    zoneText.textContent = "--";
+    closeText.textContent = "--";
+    r2Text.textContent = "--";
+    levelsTable.innerHTML = "";
   }
 }
 
