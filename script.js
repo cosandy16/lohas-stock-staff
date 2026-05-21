@@ -186,8 +186,8 @@ function renderChart(analysis) {
   const yTicks = Array.from({ length: 6 }, (_, index) => yMin + ((yMax - yMin) / 5) * index);
   const last = analysis[analysis.length - 1];
 
-  // 判斷是否為樂觀區 (超過 +1SD)
-  const isOptimistic = last.close >= last.plus1;
+  // --- 修改處：只有超過 +2SD 樂觀線才亮燈 ---
+  const isOptimisticFull = last.close >= last.plus2;
 
   const bands = `
     <path d="${linePath(analysis, xAt, (p) => y(p.plus2))} L ${linePath([...analysis].reverse(), xAt, (p) => y(p.plus1)).replace(/^M/, "L")} Z" fill="#f7dddd" opacity="0.8" />
@@ -218,16 +218,15 @@ function renderChart(analysis) {
       
       <path d="${linePath(analysis, xAt, (p) => y(p.close))}" fill="none" stroke="#17202f" stroke-width="2.4" />
       
-      ${/* 樂觀區 Highlight 效果 */ ""}
-      ${isOptimistic ? `
+      ${isOptimisticFull ? `
         <circle cx="${x(analysis.length - 1)}" cy="${y(last.close)}" r="8" fill="#c94b4b" opacity="0.4">
-          <animate attributeName="r" from="8" to="20" dur="1.5s" repeatCount="indefinite" />
-          <animate attributeName="opacity" from="0.4" to="0" dur="1.5s" repeatCount="indefinite" />
+          <animate attributeName="r" from="8" to="22" dur="1.2s" repeatCount="indefinite" />
+          <animate attributeName="opacity" from="0.5" to="0" dur="1.2s" repeatCount="indefinite" />
         </circle>
       ` : ""}
 
-      <circle cx="${x(analysis.length - 1)}" cy="${y(last.close)}" r="5" fill="${isOptimistic ? "#c94b4b" : "#17202f"}" />
-      <text x="${x(analysis.length - 1) - 10}" y="${y(last.close) - 12}" text-anchor="end" font-size="14" font-weight="900" fill="${isOptimistic ? "#c94b4b" : "#17202f"}">${formatPrice(last.close)}</text>
+      <circle cx="${x(analysis.length - 1)}" cy="${y(last.close)}" r="${isOptimisticFull ? 6 : 5}" fill="${isOptimisticFull ? "#c94b4b" : "#17202f"}" />
+      <text x="${x(analysis.length - 1) - 10}" y="${y(last.close) - 12}" text-anchor="end" font-size="14" font-weight="900" fill="${isOptimisticFull ? "#c94b4b" : "#17202f"}">${formatPrice(last.close)}</text>
       
       <line x1="${margin.left}" y1="${height - margin.bottom}" x2="${width - margin.right}" y2="${height - margin.bottom}" stroke="#b9c2cf" />
       <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${height - margin.bottom}" stroke="#b9c2cf" />
@@ -249,11 +248,13 @@ function render() {
     const zone = priceZone(latest);
     zoneText.textContent = zone;
     
-    // UI 文字高亮：進入樂觀區則變紅
-    if (zone.includes("樂觀")) {
+    // --- 修改處：目前位階文字，只有「樂觀區上緣」才亮紅燈 ---
+    if (zone === "樂觀區上緣") {
       zoneText.style.color = "#c94b4b";
+      zoneText.style.fontWeight = "900";
     } else {
       zoneText.style.color = "var(--ink)";
+      zoneText.style.fontWeight = "800";
     }
 
     closeText.textContent = formatPrice(latest.close);
