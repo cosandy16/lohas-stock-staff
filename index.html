@@ -6,7 +6,6 @@
     <title>股市樂活五線譜產生器</title>
     <link rel="stylesheet" href="styles.css" />
     <style>
-      /* 額外補充監控清單的簡單樣式 */
       .watchlist-item {
         padding: 12px;
         border: 1px solid var(--line);
@@ -17,138 +16,75 @@
         align-items: center;
         transition: transform 0.2s;
       }
-      .watchlist-item:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+      .watchlist-item:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
     </style>
   </head>
   <body>
     <main class="app-shell">
-      <aside class="controls" aria-label="分析設定">
+      <aside class="controls">
         <div class="brand">
           <p>Stock LOHAS Staff</p>
           <h1>股市樂活五線譜產生器</h1>
         </div>
 
         <section class="panel">
+          <h2 style="margin-top:0">自訂監控清單 (最多10支)</h2>
           <label>
-            股票/ETF 名稱
-            <input id="symbolName" type="text" value="範例 ETF" maxlength="24" />
+            輸入代號 (用逗點隔開)
+            <input id="watchlistInput" type="text" value="2330, 2412, 0050, 2882, AAPL" />
           </label>
+          <button id="btnWatchlist" style="background: var(--green); color: white; margin-top: 8px; width:100%; padding:10px; cursor:pointer;">開始掃描位階</button>
+          <div id="watchlistStatus" style="margin-top: 8px; font-size: 0.8rem; color: var(--muted);"></div>
+          <div id="watchlistResult" style="margin-top: 12px; display: grid; gap: 8px;"></div>
+        </section>
 
-          <div class="fetch-box" style="display: flex; flex-direction: column; gap: 12px;">
-            <label>
-              市場
-              <select id="market" style="width: 100%; padding: 8px;">
-                <option value="tw" selected>台股上市</option>
-                <option value="two">台股上櫃</option>
-                <option value="us">美股/ETF</option>
-                <option value="custom">自訂 Yahoo 代號</option>
-              </select>
-            </label>
-            
-            <label>
-              股票代號
-              <div style="display: flex; gap: 8px;">
-                <input id="symbolInput" type="text" value="2330" placeholder="例如: 2330" style="flex: 1;" />
-                <button id="fetchSymbolBtn" style="background: var(--blue); color: white;">抓取</button>
-              </div>
-            </label>
+        <section class="panel">
+          <label>標的名 <input id="symbolName" type="text" value="市場標的" /></label>
+          <div class="fetch-box" style="display: flex; flex-direction: column; gap: 10px; margin-top:10px;">
+            <select id="market" style="padding: 8px;">
+              <option value="tw" selected>台股上市 (.TW)</option>
+              <option value="two">台股上櫃 (.TWO)</option>
+              <option value="us">美股 (US)</option>
+              <option value="custom">自訂格式</option>
+            </select>
+            <div style="display: flex; gap: 8px;">
+              <input id="symbolInput" type="text" value="2330" style="flex: 1;" />
+              <button id="fetchSymbolBtn" style="background: var(--blue); color: white;">抓取主圖</button>
+            </div>
             <div id="fetchStatus" class="fetch-status"></div>
           </div>
         </section>
 
         <section class="panel">
-          <h2 style="margin-top:0">多標的即時監控 (自訂 10 支)</h2>
-          <label>
-            輸入代號 (用逗點分隔)
-            <input id="watchlistInput" type="text" value="2330, 2412, 0050, 2882, 2317" placeholder="例如: 2330, 2412, AAPL" />
-          </label>
-          <button id="btnWatchlist" style="background: var(--green); color: white; margin-top: 8px; width:100%; padding:10px;">一鍵掃描位階</button>
-          <div id="watchlistStatus" style="margin-top: 8px; font-size: 0.8rem; color: var(--muted);"></div>
-          <div id="watchlistResult" style="margin-top: 12px; display: grid; gap: 8px;">
-            </div>
-        </section>
-
-        <section class="panel">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-            <label>
-              計算週期
-              <select id="periodYears">
-                <option value="1">1 年</option>
-                <option value="2">2 年</option>
-                <option value="3.5" selected>3.5 年</option>
-                <option value="5">5 年</option>
-                <option value="all">全部資料</option>
-              </select>
-            </label>
-            <label>
-              迴歸模式
-              <select id="modelMode">
-                <option value="linear" selected>線性趨勢</option>
-                <option value="log">對數趨勢</option>
-              </select>
-            </label>
+            <label>計算週期 <select id="periodYears">
+              <option value="1">1 年</option><option value="2">2 年</option>
+              <option value="3.5" selected>3.5 年</option><option value="5">5 年</option>
+            </select></label>
+            <label>迴歸模式 <select id="modelMode">
+              <option value="linear" selected>線性趨勢</option>
+              <option value="log">對數趨勢</option>
+            </select></label>
           </div>
         </section>
 
         <section class="panel">
-          <label>
-            或是貼上 CSV 資料 (日期,收盤價)
-            <textarea id="csvInput" rows="6" placeholder="2023-01-01,100.5"></textarea>
-          </label>
-          <div style="display: flex; gap: 8px; margin-top: 8px;">
-            <button id="renderBtn" style="flex: 1;">手動繪製</button>
-            <button id="sampleBtn" style="flex: 1;">載入範例</button>
-          </div>
-          <input type="file" id="fileInput" accept=".csv,.txt" style="margin-top: 12px; font-size: 0.85rem;" />
-        </section>
-
-        <section class="info">
-          <h2>什麼是樂活五線譜？</h2>
-          <p>由薛教授推廣的投資工具，透過統計學的線性迴歸（Linear Regression）找出股價長期趨勢線，並以此計算標準差（SD）來判斷目前股價是否偏離常態。</p>
-          <dl>
-            <div><dt>+2SD 樂觀線</dt><dd>明顯偏高，通常代表過度樂觀，需留意風險。</dd></div>
-            <div><dt>+1SD 相對樂觀線</dt><dd>偏熱，適合觀察是否過度樂觀。</dd></div>
-            <div><dt>中線</dt><dd>長期趨勢估計值。</dd></div>
-            <div><dt>-1SD 相對悲觀線</dt><dd>偏低，常被用來觀察分批區。</dd></div>
-            <div><dt>-2SD 悲觀線</dt><dd>明顯偏低，但仍需看基本面與風險。</dd></div>
-          </dl>
+          <textarea id="csvInput" rows="3" style="display:none;"></textarea>
+          <button id="sampleBtn" style="width:100%">載入模擬範例</button>
         </section>
       </aside>
 
       <section class="workspace">
         <header class="summary">
-          <div>
-            <p id="rangeText">等待資料</p>
-            <h2 id="chartTitle">股市樂活五線譜</h2>
-          </div>
-          <div class="status-card">
-            <span>目前位階</span>
-            <strong id="zoneText">--</strong>
-          </div>
-          <div class="status-card">
-            <span>收盤價</span>
-            <strong id="closeText">--</strong>
-          </div>
-          <div class="status-card">
-            <span>R²</span>
-            <strong id="r2Text">--</strong>
-          </div>
+          <div><p id="rangeText">--</p><h2 id="chartTitle">請選擇標的</h2></div>
+          <div class="status-card"><span>目前位階</span><strong id="zoneText">--</strong></div>
+          <div class="status-card"><span>收盤價</span><strong id="closeText">--</strong></div>
+          <div class="status-card"><span>R²</span><strong id="r2Text">--</strong></div>
         </header>
-
-        <div class="chart-card">
-          <div id="chart" class="chart" role="img" aria-label="樂活五線譜圖表"></div>
-        </div>
-
+        <div class="chart-card"><div id="chart" class="chart"></div></div>
         <section class="table-card">
-          <h2>最新五線譜數值</h2>
           <table>
-            <thead>
-              <tr>
-                <th>線位</th>
-                <th>數值</th>
-                <th>說明</th>
-              </tr>
-            </thead>
+            <thead><tr><th>線位</th><th>數值</th><th>說明</th></tr></thead>
             <tbody id="levelsTable"></tbody>
           </table>
         </section>
