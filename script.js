@@ -28,7 +28,7 @@ const levelDefs = [
   { key: "minus2", label: "-2SD 悲觀線", color: "#12614a" },
 ];
 
-// --- 運算邏輯 ---
+// --- 核心運算 ---
 function regression(values) {
   const n = values.length;
   const sumX = values.reduce((s, p) => s + p.x, 0);
@@ -57,7 +57,6 @@ function buildAnalysis(data, currentMode = modelMode.value, currentYears = perio
   const cutoff = new Date(lastDate);
   cutoff.setDate(cutoff.getDate() - Math.round(years * 365));
   const filtered = data.filter(p => new Date(p.date) >= cutoff);
-
   if (filtered.length < 10) throw new Error("資料不足");
   
   const startTime = new Date(filtered[0].date).getTime();
@@ -93,6 +92,16 @@ function priceZone(p) {
   return "悲觀區下緣";
 }
 
+// 新增：取得價格區間描述的函式
+function getPriceRangeDesc(p) {
+  if (p.close >= p.plus2) return `> ${formatPrice(p.plus2)} (+2SD上限)`;
+  if (p.close >= p.plus1) return `${formatPrice(p.plus1)} ~ ${formatPrice(p.plus2)}`;
+  if (p.close >= p.mid)   return `${formatPrice(p.mid)} ~ ${formatPrice(p.plus1)}`;
+  if (p.close >= p.minus1) return `${formatPrice(p.minus1)} ~ ${formatPrice(p.mid)}`;
+  if (p.close >= p.minus2) return `${formatPrice(p.minus2)} ~ ${formatPrice(p.minus1)}`;
+  return `< ${formatPrice(p.minus2)} (-2SD下限)`;
+}
+
 function formatPrice(v) { return Number(v).toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
 // --- 繪圖 ---
@@ -102,17 +111,14 @@ function renderChart(analysis) {
   const last = analysis[analysis.length - 1];
   const minP = Math.min(...analysis.map(p => Math.min(p.close, p.minus2))) * 0.98;
   const maxP = Math.max(...analysis.map(p => Math.max(p.close, p.plus2))) * 1.02;
-
   const x = (i) => margin.left + (i / (analysis.length - 1)) * (width - margin.left - margin.right);
   const y = (val) => height - margin.bottom - ((val - minP) / (maxP - minP)) * (height - margin.top - margin.bottom);
-
-  const isUp = last.close >= last.plus2, isDown = last.close <= last.minus2;
 
   chart.innerHTML = `
     <svg viewBox="0 0 ${width} ${height}" style="background:#fff; border-radius:8px;">
       ${levelDefs.map(l => `<path d="${analysis.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(p[l.key])}`).join(" ")}" fill="none" stroke="${l.color}" stroke-width="${l.key === 'mid' ? 2.5 : 1}" opacity="0.6" />`).join("")}
       <path d="${analysis.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(p.close)}`).join(" ")}" fill="none" stroke="#17202f" stroke-width="2" />
-      ${(isUp || isDown) ? `<circle cx="${x(analysis.length - 1)}" cy="${y(last.close)}" r="10" fill="${isUp ? '#c94b4b' : '#12614a'}" opacity="0.4"><animate attributeName="r" from="6" to="18" dur="1s" repeatCount="indefinite"/><animate attributeName="opacity" from="0.6" to="0" dur="1s" repeatCount="indefinite"/></circle>` : ""}
+      ${(last.close >= last.plus2 || last.close <= last.minus2) ? `<circle cx="${x(analysis.length - 1)}" cy="${y(last.close)}" r="10" fill="${last.close >= last.plus2 ? '#c94b4b' : '#12614a'}" opacity="0.4"><animate attributeName="r" from="6" to="18" dur="1s" repeatCount="indefinite"/><animate attributeName="opacity" from="0.6" to="0" dur="1s" repeatCount="indefinite"/></circle>` : ""}
       <circle cx="${x(analysis.length - 1)}" cy="${y(last.close)}" r="5" fill="#17202f" />
     </svg>
   `;
@@ -123,35 +129,23 @@ function render() {
     const data = JSON.parse(csvInput.value);
     const analysis = buildAnalysis(data);
     const last = analysis[analysis.length - 1];
-    const zone = priceZone(last);
-
     chartTitle.textContent = symbolName.value;
-    zoneText.textContent = zone;
+    zoneText.textContent = priceZone(last);
     zoneText.style.color = (last.close >= last.plus2) ? "#c94b4b" : (last.close <= last.minus2 ? "#12614a" : "var(--ink)");
     closeText.textContent = formatPrice(last.close);
     r2Text.textContent = last.r2.toFixed(3);
-    
     renderChart(analysis);
     levelsTable.innerHTML = levelDefs.map(l => `<tr><td>${l.label}</td><td>${formatPrice(last[l.key])}</td><td>${priceZone(last) === l.label ? "●" : ""}</td></tr>`).join("");
   } catch (e) {}
 }
 
-// --- 批次監控核心 (修正版) ---
+// --- 監控清單 ---
 async function fetchLevelForWatchlist(symbol) {
   let finalSym = symbol.trim().toUpperCase();
-  let marketType = "tw";
-  
-  // 自動判斷市場
-  if (finalSym.includes(".TW") || /^\d{4,6}$/.test(finalSym)) {
-    marketType = "tw";
-    if (!finalSym.includes(".")) finalSym += ".TW";
-  } else {
-    marketType = "us";
-  }
-
-  const p = new URLSearchParams({ symbol: finalSym.replace(".TW",""), market: marketType, years: "3.5" });
+  if (!finalSym.includes(".") && /^\d+$/.test(finalSym)) finalSym += ".TW";
+  const p = new URLSearchParams({ symbol: finalSym.replace(".TW","").replace(".TWO",""), market: finalSym.includes(".TWO") ? "two" : (finalSym.includes(".TW") ? "tw" : "us"), years: "3.5" });
   const res = await fetch(`/api/yahoo?${p.toString()}`);
-  if (!res.ok) throw new Error("Fetch failed");
+  if (!res.ok) throw new Error();
   const json = await res.json();
   const analysis = buildAnalysis(json.rows, "linear", "3.5");
   return { sym: json.symbol, last: analysis[analysis.length - 1] };
@@ -160,7 +154,7 @@ async function fetchLevelForWatchlist(symbol) {
 btnWatchlist.addEventListener("click", async () => {
   const syms = watchlistInput.value.split(",").map(s => s.trim()).filter(s => s).slice(0, 10);
   watchlistResult.innerHTML = "";
-  watchlistStatus.textContent = "🔍 正在掃描 (每支間隔 0.5 秒)...";
+  watchlistStatus.textContent = "🔍 正在掃描區間...";
   btnWatchlist.disabled = true;
 
   for (const s of syms) {
@@ -173,23 +167,22 @@ btnWatchlist.addEventListener("click", async () => {
       if (isDown) item.style.borderLeft = "6px solid #12614a";
 
       item.innerHTML = `
-        <div><strong>${sym}</strong><br><small>$${formatPrice(last.close)}</small></div>
+        <div><strong>${sym}</strong><br><small>現價: ${formatPrice(last.close)}</small></div>
         <div style="text-align:right;">
-          <span style="font-weight:900; color:${isUp ? '#c94b4b' : (isDown ? '#12614a' : '#666')}">${priceZone(last)}</span>
-          <br><small>+2SD: ${formatPrice(last.plus2)}</small>
+          <span style="font-weight:900; color:${isUp ? '#c94b4b' : (isDown ? '#12614a' : '#2c6ebd')}">${priceZone(last)}</span>
+          <br><small style="color:#666">區間: ${getPriceRangeDesc(last)}</small>
         </div>
       `;
       watchlistResult.appendChild(item);
     } catch {
-      watchlistResult.innerHTML += `<div style="color:red; font-size:0.8rem; padding:8px;">❌ ${s} 抓取失敗 (代號有誤或連線逾時)</div>`;
+      watchlistResult.innerHTML += `<div style="color:red; font-size:0.8rem; padding:8px;">❌ ${s} 失敗</div>`;
     }
-    await new Promise(r => setTimeout(r, 500)); // 延遲 0.5 秒，避免被封鎖
+    await new Promise(r => setTimeout(r, 500));
   }
   watchlistStatus.textContent = "✅ 掃描完成";
   btnWatchlist.disabled = false;
 });
 
-// --- 主圖抓取 ---
 fetchSymbolBtn.addEventListener("click", async () => {
   fetchStatus.textContent = "讀取中...";
   try {
@@ -203,7 +196,6 @@ fetchSymbolBtn.addEventListener("click", async () => {
   } catch { fetchStatus.textContent = "失敗"; }
 });
 
-// 初始模擬
 document.querySelector("#sampleBtn").addEventListener("click", () => {
   const mock = []; let p = 100;
   for(let i=0; i<300; i++) mock.push({ date: new Date(Date.now() - (300-i)*86400000).toISOString(), close: p += (Math.random()-0.48) });
