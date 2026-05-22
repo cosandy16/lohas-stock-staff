@@ -5,6 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>股市樂活五線譜產生器</title>
     <link rel="stylesheet" href="styles.css" />
+    <style>
+      /* 額外補充監控清單的簡單樣式 */
+      .watchlist-item {
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--paper);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: transform 0.2s;
+      }
+      .watchlist-item:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    </style>
   </head>
   <body>
     <main class="app-shell">
@@ -20,8 +34,8 @@
             <input id="symbolName" type="text" value="範例 ETF" maxlength="24" />
           </label>
 
-		<div class="fetch-box" style="display: flex; flex-direction: column; gap: 12px;">
-            <label style="display: flex; flex-direction: column; gap: 4px;">
+          <div class="fetch-box" style="display: flex; flex-direction: column; gap: 12px;">
+            <label>
               市場
               <select id="market" style="width: 100%; padding: 8px;">
                 <option value="tw" selected>台股上市</option>
@@ -31,72 +45,68 @@
               </select>
             </label>
             
-            <label style="display: flex; flex-direction: column; gap: 4px;">
-              股票代號
-              <input id="symbolInput" type="text" value="2330" maxlength="18" 
-                     style="font-size: 28px; width: 100%; padding: 10px; text-align: center; font-weight: bold; border: 2px solid var(--green); border-radius: 6px; background-color: #fff;" />
-            </label>
-            
-            <button id="fetchSymbolBtn" class="btn-fetch" style="width: 100%; margin-top: 4px;">從 Yahoo Finance 直接抓取資料</button>
-          </div>
-          <p id="fetchStatus" class="fetch-status">台股輸入 2330；美股/ETF 輸入 AAPL、QQQ、VOO；自訂可輸入 2330.TW 或 0050.TW。</p>
-
-          <div class="two-columns">
             <label>
-              分析期間
+              股票代號
+              <div style="display: flex; gap: 8px;">
+                <input id="symbolInput" type="text" value="2330" placeholder="例如: 2330" style="flex: 1;" />
+                <button id="fetchSymbolBtn" style="background: var(--blue); color: white;">抓取</button>
+              </div>
+            </label>
+            <div id="fetchStatus" class="fetch-status"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2 style="margin-top:0">多標的即時監控 (自訂 10 支)</h2>
+          <label>
+            輸入代號 (用逗點分隔)
+            <input id="watchlistInput" type="text" value="2330, 2412, 0050, 2882, 2317" placeholder="例如: 2330, 2412, AAPL" />
+          </label>
+          <button id="btnWatchlist" style="background: var(--green); color: white; margin-top: 8px; width:100%; padding:10px;">一鍵掃描位階</button>
+          <div id="watchlistStatus" style="margin-top: 8px; font-size: 0.8rem; color: var(--muted);"></div>
+          <div id="watchlistResult" style="margin-top: 12px; display: grid; gap: 8px;">
+            </div>
+        </section>
+
+        <section class="panel">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <label>
+              計算週期
               <select id="periodYears">
-                <option value="1">近 1 年</option>
-                <option value="2">近 2 年</option>
-                <option value="3.5" selected>近 3.5 年</option>
-                <option value="5">近 5 年</option>
+                <option value="1">1 年</option>
+                <option value="2">2 年</option>
+                <option value="3.5" selected>3.5 年</option>
+                <option value="5">5 年</option>
                 <option value="all">全部資料</option>
               </select>
             </label>
-
-			<label>
-			  迴歸模式
-			  <select id="modelMode">
-				<option value="linear" selected>線性趨勢 (Linear)</option>
-				<option value="log">對數趨勢 (Logarithmic)</option>
-			  </select>
-			</label>
-          </div>
-
-          <label>
-            CSV 資料
-            <textarea id="csvInput" spellcheck="false"></textarea>
-          </label>
-
-          <div class="actions">
-            <label class="file-button">
-              <input id="fileInput" type="file" accept=".csv,text/csv" />
-              上傳 CSV
+            <label>
+              迴歸模式
+              <select id="modelMode">
+                <option value="linear" selected>線性趨勢</option>
+                <option value="log">對數趨勢</option>
+              </select>
             </label>
-            <button id="sampleBtn" type="button">載入範例</button>
-            <button id="renderBtn" type="button" class="primary-button">產生圖表</button>
           </div>
         </section>
 
-        <section class="panel compact">
-          <h2>CSV 從哪裡來</h2>
-          <p>台股與美股/ETF 都可以直接按上方按鈕抓 Yahoo Finance 日收盤資料；也可手動貼上 CSV。</p>
-          <div class="source-links">
-            <a href="https://wwwc.twse.com.tw/zh/trading/historical/bwibbu.html" target="_blank" rel="noreferrer">台股 CSV</a>
-            <a href="https://finance.yahoo.com/" target="_blank" rel="noreferrer">Yahoo Finance</a>
+        <section class="panel">
+          <label>
+            或是貼上 CSV 資料 (日期,收盤價)
+            <textarea id="csvInput" rows="6" placeholder="2023-01-01,100.5"></textarea>
+          </label>
+          <div style="display: flex; gap: 8px; margin-top: 8px;">
+            <button id="renderBtn" style="flex: 1;">手動繪製</button>
+            <button id="sampleBtn" style="flex: 1;">載入範例</button>
           </div>
+          <input type="file" id="fileInput" accept=".csv,.txt" style="margin-top: 12px; font-size: 0.85rem;" />
         </section>
 
-        <section class="panel compact">
-          <h2>CSV 格式</h2>
-          <p>每列一筆：日期,收盤價。可含標題列，例如 <code>Date,Close</code>。</p>
-          <p>例：<code>2026-05-15,182.5</code></p>
-          <p>如果下載的 CSV 欄位很多，只要保留日期與收盤價兩欄即可。</p>
-        </section>
-
-        <section class="panel compact">
-          <h2>位階說明</h2>
-          <dl class="legend-list">
-            <div><dt>+2SD 樂觀線</dt><dd>股價偏高，追價風險較高。</dd></div>
+        <section class="info">
+          <h2>什麼是樂活五線譜？</h2>
+          <p>由薛教授推廣的投資工具，透過統計學的線性迴歸（Linear Regression）找出股價長期趨勢線，並以此計算標準差（SD）來判斷目前股價是否偏離常態。</p>
+          <dl>
+            <div><dt>+2SD 樂觀線</dt><dd>明顯偏高，通常代表過度樂觀，需留意風險。</dd></div>
             <div><dt>+1SD 相對樂觀線</dt><dd>偏熱，適合觀察是否過度樂觀。</dd></div>
             <div><dt>中線</dt><dd>長期趨勢估計值。</dd></div>
             <div><dt>-1SD 相對悲觀線</dt><dd>偏低，常被用來觀察分批區。</dd></div>
@@ -142,11 +152,8 @@
             <tbody id="levelsTable"></tbody>
           </table>
         </section>
-
-        <p class="disclaimer">本工具用統計方式視覺化股價相對位階，僅供研究與紀錄，不構成投資建議。個股需搭配基本面、流動性、產業與風險控管。</p>
       </section>
     </main>
-
     <script src="script.js"></script>
   </body>
 </html>
