@@ -93,13 +93,28 @@ function priceZone(p) {
 }
 
 // 新增：取得價格區間描述的函式
+// 修改後的價格區間描述函式
 function getPriceRangeDesc(p) {
-  if (p.close >= p.plus2) return `> ${formatPrice(p.plus2)} (+2SD上限)`;
-  if (p.close >= p.plus1) return `${formatPrice(p.plus1)} ~ ${formatPrice(p.plus2)}`;
-  if (p.close >= p.mid)   return `${formatPrice(p.mid)} ~ ${formatPrice(p.plus1)}`;
-  if (p.close >= p.minus1) return `${formatPrice(p.minus1)} ~ ${formatPrice(p.mid)}`;
-  if (p.close >= p.minus2) return `${formatPrice(p.minus2)} ~ ${formatPrice(p.minus1)}`;
-  return `< ${formatPrice(p.minus2)} (-2SD下限)`;
+  const f = formatPrice; // 簡寫方便閱讀
+  
+  if (p.close >= p.plus2) {
+    return `> ${f(p.plus2)} (+2SD 樂觀線)`;
+  }
+  if (p.close >= p.plus1) {
+    return `${f(p.plus1)} (相對樂觀) ~ ${f(p.plus2)} (樂觀)`;
+  }
+  if (p.close >= p.mid) {
+    return `${f(p.mid)} (中線) ~ ${f(p.plus1)} (相對樂觀)`;
+  }
+  if (p.close >= p.minus1) {
+    return `${f(p.minus1)} (相對悲觀) ~ ${f(p.mid)} (中線)`;
+  }
+  if (p.close >= p.minus2) {
+    return `${f(p.minus2)} (悲觀) ~ ${f(p.minus1)} (相對悲觀)`;
+  }
+  
+  // 低於 -2SD
+  return `< ${f(p.minus2)} (-2SD 悲觀線)`;
 }
 
 function formatPrice(v) { return Number(v).toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
