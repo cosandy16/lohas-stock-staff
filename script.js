@@ -138,14 +138,22 @@ function render() {
     const data = JSON.parse(csvInput.value);
     const analysis = buildAnalysis(data);
     const last = analysis[analysis.length - 1];
-    chartTitle.textContent = symbolName.value;
-    zoneText.textContent = priceZone(last);
-    zoneText.style.color = (last.close >= last.plus2) ? "#c94b4b" : (last.close <= last.minus2 ? "#12614a" : "var(--ink)");
-    closeText.textContent = formatPrice(last.close);
-    r2Text.textContent = last.r2.toFixed(3);
+    
+    if (chartTitle) chartTitle.textContent = symbolName.value;
+    if (zoneText) {
+      zoneText.textContent = priceZone(last);
+      zoneText.style.color = (last.close >= last.plus2) ? "#c94b4b" : (last.close <= last.minus2 ? "#12614a" : "var(--ink)");
+    }
+    if (closeText) closeText.textContent = formatPrice(last.close);
+    if (r2Text) r2Text.textContent = last.r2.toFixed(3);
+    
     renderChart(analysis);
-    levelsTable.innerHTML = levelDefs.map(l => `<tr><td>${l.label}</td><td>${formatPrice(last[l.key])}</td><td>${priceZone(last) === l.label ? "●" : ""}</td></tr>`).join("");
-  } catch (e) {}
+    if (levelsTable) {
+      levelsTable.innerHTML = levelDefs.map(l => `<tr><td>${l.label}</td><td>${formatPrice(last[l.key])}</td><td>${priceZone(last) === l.label ? "●" : ""}</td></tr>`).join("");
+    }
+  } catch (e) {
+    console.error("渲染出錯：", e);
+  }
 }
 
 // --- 監控清單 ---
@@ -215,7 +223,7 @@ btnWatchlist.addEventListener("click", async () => {
   btnWatchlist.disabled = false;
 });
 
-// 全部清除按鈕的監聽
+// 全部清除按鈕
 btnClearWatchlist.addEventListener("click", () => {
   watchlistInput.value = "";
   localStorage.removeItem("lohas_watchlist");
@@ -223,17 +231,38 @@ btnClearWatchlist.addEventListener("click", () => {
   watchlistStatus.textContent = "🧹 已全部清除";
 });
 
+// --- 💡 智慧防呆優化：點擊詳細查詢按鈕 ---
 fetchSymbolBtn.addEventListener("click", async () => {
   fetchStatus.textContent = "讀取中...";
+  
+  let inputVal = symbolInput.value.trim().toUpperCase();
+  let selectedMarket = market.value;
+
+  // 💡 核心防呆：如果使用者輸入 2330 卻選了 .TWO (上櫃)，主動修正為 tw 
+  if (inputVal === "2330" && selectedMarket === "two") {
+    selectedMarket = "tw";
+    market.value = "tw"; // 幫使用者把畫面的選單也切換回「台股上市」
+  }
+
   try {
-    const p = new URLSearchParams({ symbol: symbolInput.value, market: market.value, years: periodYears.value });
+    const p = new URLSearchParams({ 
+      symbol: inputVal, 
+      market: selectedMarket, 
+      years: periodYears.value 
+    });
+    
     const res = await fetch(`/api/yahoo?${p.toString()}`);
+    if (!res.ok) throw new Error();
     const json = await res.json();
+    
     csvInput.value = JSON.stringify(json.rows);
     symbolName.value = json.symbol;
     render();
     fetchStatus.textContent = "成功";
-  } catch { fetchStatus.textContent = "失敗"; }
+  } catch (err) { 
+    fetchStatus.textContent = "失敗"; 
+    console.error("Fetch 錯誤資訊:", err);
+  }
 });
 
 document.querySelector("#sampleBtn").addEventListener("click", () => {
