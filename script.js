@@ -17,6 +17,7 @@ const levelsTable = document.querySelector("#levelsTable");
 // 監控清單 DOM
 const watchlistInput = document.querySelector("#watchlistInput");
 const btnWatchlist = document.querySelector("#btnWatchlist");
+const btnClearWatchlist = document.querySelector("#btnClearWatchlist"); // 💡 新增：清除按鈕 DOM
 const watchlistResult = document.querySelector("#watchlistResult");
 const watchlistStatus = document.querySelector("#watchlistStatus");
 
@@ -28,7 +29,7 @@ const levelDefs = [
   { key: "minus2", label: "-2SD 悲觀線", color: "#12614a" },
 ];
 
-// --- 💡 網頁載入時，自動讀取上次儲存的 10 檔股票 ---
+// --- 網頁載入時，自動讀取上次儲存的 10 檔股票 ---
 document.addEventListener("DOMContentLoaded", () => {
   const savedWatchlist = localStorage.getItem("lohas_watchlist");
   if (savedWatchlist) {
@@ -162,7 +163,6 @@ async function fetchLevelForWatchlist(symbol) {
 btnWatchlist.addEventListener("click", async () => {
   const rawInput = watchlistInput.value;
   
-  // 💡 點擊按鈕時，自動將輸入框內的代碼儲存在瀏覽器中
   localStorage.setItem("lohas_watchlist", rawInput);
 
   const syms = rawInput.split(",").map(s => s.trim()).filter(s => s).slice(0, 10);
@@ -174,29 +174,28 @@ btnWatchlist.addEventListener("click", async () => {
     try {
       const { sym, last } = await fetchLevelForWatchlist(s);
       
-      // 💡 核心修改：精確定義只有最頂跟最底兩個狀態觸發特殊色
-      const isSellSignal = last.close >= last.plus2; // 只有高於等於 +2SD (樂觀區上緣)
-      const isBuySignal = last.close <= last.minus2; // 只有低於等於 -2SD (悲觀區下緣)
+      // 精確定義：只有樂觀區上緣（>= plus2）或悲觀區下緣（<= minus2）塗色
+      const isSellSignal = last.close >= last.plus2; 
+      const isBuySignal = last.close <= last.minus2; 
 
       const item = document.createElement("div");
       item.className = "watchlist-item";
 
       if (isBuySignal) {
-        // 🟢 悲觀區下緣：塗上淡綠色背景、深綠色左邊框
+        // 🟢 悲觀區下緣：淡綠底、深綠框
         item.style.backgroundColor = "#e8f5e9";
         item.style.border = "1px solid #a5d6a7";
         item.style.borderLeft = "6px solid #12614a";
       } else if (isSellSignal) {
-        // 🔴 樂觀區上緣：塗上淡紅色背景、深紅色左邊框
+        // 🔴 樂觀區上緣：淡紅底、深紅框
         item.style.backgroundColor = "#ffebee";
         item.style.border = "1px solid #ffcdd2";
         item.style.borderLeft = "6px solid #c94b4b";
       } else {
-        // ⚪ 其它一般區間：維持原本設計（白底、藍色邊框）
+        // ⚪ 一般觀望區間：維持白底藍邊
         item.style.borderLeft = "6px solid #2c6ebd";
       }
 
-      // 動態調整狀態文字顏色與小字字體顏色
       const zoneColor = isSellSignal ? '#c94b4b' : (isBuySignal ? '#12614a' : '#2c6ebd');
       const smallTextColor = (isBuySignal || isSellSignal) ? '#333333' : '#666666';
 
@@ -219,6 +218,14 @@ btnWatchlist.addEventListener("click", async () => {
   }
   watchlistStatus.textContent = "✅ 掃描完成";
   btnWatchlist.disabled = false;
+});
+
+// --- 💡 新增：「全部清除」按鈕的點擊監聽邏輯 ---
+btnClearWatchlist.addEventListener("click", () => {
+  watchlistInput.value = "";              // 1. 清空文字輸入框
+  localStorage.removeItem("lohas_watchlist"); // 2. 刪除瀏覽器記憶紀錄
+  watchlistResult.innerHTML = "";         // 3. 清除下方掃描出來的卡片結果
+  watchlistStatus.textContent = "🧹 已全部清除"; // 4. 變更狀態提示文字
 });
 
 fetchSymbolBtn.addEventListener("click", async () => {

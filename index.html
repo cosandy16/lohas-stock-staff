@@ -17,46 +17,63 @@
         transition: transform 0.2s;
       }
       .watchlist-item:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+      
+      /* 💡 新增：讓並排的按鈕在小螢幕時也能完美呈現的 RWD 樣式 */
+      .watchlist-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      #btnClearWatchlist {
+        background-color: #667085; /* 採用與原系統 --muted 接近的質感灰色 */
+      }
+      #btnClearWatchlist:hover {
+        background-color: #475467;
+      }
     </style>
   </head>
   <body>
-    <main class="app-shell">
-      <aside class="controls">
-        <div class="brand">
+    <main class=\"app-shell\">
+      <aside class=\"controls\">
+        <div class=\"brand\">
           <p>Stock LOHAS Staff</p>
           <h1>股市樂活五線譜產生器</h1>
         </div>
 
-        <section class="panel">
-          <h2 style="margin-top:0">自訂監控清單 (最多10支)</h2>
+        <section class=\"panel\">
+          <h2 style=\"margin-top:0\">自訂監控清單 (最多10支)</h2>
           <label>
             輸入代號 (用逗點隔開)
-            <input id="watchlistInput" type="text" value="2330, 2412, 0050, 2882, AAPL" />
+            <input id=\"watchlistInput\" type=\"text\" value=\"2330, 2412, 0050, 2882, AAPL\" />
           </label>
-          <button id="btnWatchlist" style="background: var(--green); color: white; margin-top: 8px; width:100%; padding:10px; cursor:pointer;">開始掃描位階</button>
-          <div id="watchlistStatus" style="margin-top: 8px; font-size: 0.8rem; color: var(--muted);"></div>
-          <div id="watchlistResult" style="margin-top: 12px; display: grid; gap: 8px;"></div>
-        </section>
-
-        <section class="panel">
-          <label>標的名 <input id="symbolName" type="text" value="市場標的" /></label>
-          <div class="fetch-box" style="display: flex; flex-direction: column; gap: 10px; margin-top:10px;">
-            <select id="market" style="padding: 8px;">
-              <option value="tw" selected>台股上市 (.TW)</option>
-              <option value="two">台股上櫃 (.TWO)</option>
-              <option value="us">美股 (US)</option>
-              <option value="custom">自訂格式</option>
-            </select>
-            <div style="display: flex; gap: 8px;">
-              <input id="symbolInput" type="text" value="2330" style="flex: 1;" />
-              <button id="fetchSymbolBtn" style="background: var(--blue); color: white;">抓取主圖</button>
-            </div>
-            <div id="fetchStatus" class="fetch-status"></div>
+          
+          <div class="watchlist-actions">
+            <button id="btnWatchlist">開始區域掃描</button>
+            <button id="btnClearWatchlist">全部清除</button>
           </div>
+          <p id="watchlistStatus" style="font-size:0.85rem; color:var(--muted); margin-top:6px;"></p>
+          
+          <div id="watchlistResult" style="display:grid; gap:8px; margin-top:12px;"></div>
         </section>
 
         <section class="panel">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <h2>單檔詳細查詢</h2>
+          <div style="display:grid; grid-template-columns: 1fr auto; gap: 8px; align-items: flex-end;">
+            <label>股票代號
+              <input id="symbolInput" type="text" placeholder="例如: 2330" value="2330" />
+            </label>
+            <label>市場
+              <select id="market">
+                <option value="tw" selected>台股上市 (.TW)</option>
+                <option value="two">台股上櫃 (.TWO)</option>
+                <option value="us">美股 (US)</option>
+              </select>
+            </label>
+          </div>
+          <button id="fetchSymbolBtn" style="width:100%; margin-top:12px;">讀取並繪製五線譜</button>
+          <span id="fetchStatus" style="font-size:0.85rem; color:var(--muted); margin-left:4px;"></span>
+
+          <div style="margin-top:12px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <label>計算週期 <select id="periodYears">
               <option value="1">1 年</option><option value="2">2 年</option>
               <option value="3.5" selected>3.5 年</option><option value="5">5 年</option>
@@ -77,16 +94,17 @@
       <section class="workspace">
         <header class="summary">
           <div><p id="rangeText">--</p><h2 id="chartTitle">請選擇標的</h2></div>
-          <div class="status-card"><span>目前位階</span><strong id="zoneText">--</strong></div>
-          <div class="status-card"><span>收盤價</span><strong id="closeText">--</strong></div>
-          <div class="status-card"><span>R²</span><strong id="r2Text">--</strong></div>
+          <div class="status-card"><span>目前位階</span><strong id=\"zoneText\">--</strong></div>
+          <div class="status-card"><span>收盤價</span><strong id=\"closeText\">--</strong></div>
+          <div class="status-card"><span>R²</span><strong id=\"r2Text\">--</strong></div>
         </header>
         <div class="chart-card"><div id="chart" class="chart"></div></div>
         <section class="table-card">
           <table>
-            <thead><tr><th>線位</th><th>數值</th><th>說明</th></tr></thead>
+            <thead><tr><th>線位</th><th>數值</th><th>目前位置</th></tr></thead>
             <tbody id="levelsTable"></tbody>
           </table>
+          <p class="disclaimer" style="margin-top:16px;">聲明：本工具計算之五線譜僅供技術分析學術參考，不構成任何投資買賣建議。過去績效不代表未來表現，投資人應獨立評估風險。</p>
         </section>
       </section>
     </main>
