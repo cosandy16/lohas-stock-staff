@@ -1,5 +1,4 @@
 const csvInput = document.querySelector("#csvInput");
-const symbolName = document.querySelector("#symbolName");
 const market = document.querySelector("#market");
 const symbolInput = document.querySelector("#symbolInput");
 const fetchSymbolBtn = document.querySelector("#fetchSymbolBtn");
@@ -139,7 +138,6 @@ function render() {
     const analysis = buildAnalysis(data);
     const last = analysis[analysis.length - 1];
     
-    if (chartTitle) chartTitle.textContent = symbolName.value;
     if (zoneText) {
       zoneText.textContent = priceZone(last);
       zoneText.style.color = (last.close >= last.plus2) ? "#c94b4b" : (last.close <= last.minus2 ? "#12614a" : "var(--ink)");
@@ -231,18 +229,12 @@ btnClearWatchlist.addEventListener("click", () => {
   watchlistStatus.textContent = "🧹 已全部清除";
 });
 
-// --- 💡 智慧防呆優化：點擊詳細查詢按鈕 ---
+// --- 💡 修正：完全移除錯誤的隱藏元件，改為正確的標題名稱賦值 ---
 fetchSymbolBtn.addEventListener("click", async () => {
   fetchStatus.textContent = "讀取中...";
   
   let inputVal = symbolInput.value.trim().toUpperCase();
   let selectedMarket = market.value;
-
-  // 💡 核心防呆：如果使用者輸入 2330 卻選了 .TWO (上櫃)，主動修正為 tw 
-  if (inputVal === "2330" && selectedMarket === "two") {
-    selectedMarket = "tw";
-    market.value = "tw"; // 幫使用者把畫面的選單也切換回「台股上市」
-  }
 
   try {
     const p = new URLSearchParams({ 
@@ -256,7 +248,12 @@ fetchSymbolBtn.addEventListener("click", async () => {
     const json = await res.json();
     
     csvInput.value = JSON.stringify(json.rows);
-    symbolName.value = json.symbol;
+    
+    // 💡 關鍵修正點：直接將抓回來的真實股票代號（如 2330.TWO），放進畫面的 chartTitle 標題中
+    if (chartTitle) {
+      chartTitle.textContent = json.symbol;
+    }
+    
     render();
     fetchStatus.textContent = "成功";
   } catch (err) { 
@@ -269,5 +266,6 @@ document.querySelector("#sampleBtn").addEventListener("click", () => {
   const mock = []; let p = 100;
   for(let i=0; i<300; i++) mock.push({ date: new Date(Date.now() - (300-i)*86400000).toISOString(), close: p += (Math.random()-0.48) });
   csvInput.value = JSON.stringify(mock);
+  if (chartTitle) chartTitle.textContent = "模擬範例股票";
   render();
 });
