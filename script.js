@@ -17,7 +17,7 @@ const levelsTable = document.querySelector("#levelsTable");
 // 監控清單 DOM
 const watchlistInput = document.querySelector("#watchlistInput");
 const btnWatchlist = document.querySelector("#btnWatchlist");
-const btnClearWatchlist = document.querySelector("#btnClearWatchlist"); // 💡 新增：清除按鈕 DOM
+const btnClearWatchlist = document.querySelector("#btnClearWatchlist");
 const watchlistResult = document.querySelector("#watchlistResult");
 const watchlistStatus = document.querySelector("#watchlistStatus");
 
@@ -162,7 +162,6 @@ async function fetchLevelForWatchlist(symbol) {
 
 btnWatchlist.addEventListener("click", async () => {
   const rawInput = watchlistInput.value;
-  
   localStorage.setItem("lohas_watchlist", rawInput);
 
   const syms = rawInput.split(",").map(s => s.trim()).filter(s => s).slice(0, 10);
@@ -174,7 +173,6 @@ btnWatchlist.addEventListener("click", async () => {
     try {
       const { sym, last } = await fetchLevelForWatchlist(s);
       
-      // 精確定義：只有樂觀區上緣（>= plus2）或悲觀區下緣（<= minus2）塗色
       const isSellSignal = last.close >= last.plus2; 
       const isBuySignal = last.close <= last.minus2; 
 
@@ -182,17 +180,14 @@ btnWatchlist.addEventListener("click", async () => {
       item.className = "watchlist-item";
 
       if (isBuySignal) {
-        // 🟢 悲觀區下緣：淡綠底、深綠框
         item.style.backgroundColor = "#e8f5e9";
         item.style.border = "1px solid #a5d6a7";
         item.style.borderLeft = "6px solid #12614a";
       } else if (isSellSignal) {
-        // 🔴 樂觀區上緣：淡紅底、深紅框
         item.style.backgroundColor = "#ffebee";
         item.style.border = "1px solid #ffcdd2";
         item.style.borderLeft = "6px solid #c94b4b";
       } else {
-        // ⚪ 一般觀望區間：維持白底藍邊
         item.style.borderLeft = "6px solid #2c6ebd";
       }
 
@@ -220,12 +215,12 @@ btnWatchlist.addEventListener("click", async () => {
   btnWatchlist.disabled = false;
 });
 
-// --- 💡 新增：「全部清除」按鈕的點擊監聽邏輯 ---
+// 全部清除按鈕的監聽
 btnClearWatchlist.addEventListener("click", () => {
-  watchlistInput.value = "";              // 1. 清空文字輸入框
-  localStorage.removeItem("lohas_watchlist"); // 2. 刪除瀏覽器記憶紀錄
-  watchlistResult.innerHTML = "";         // 3. 清除下方掃描出來的卡片結果
-  watchlistStatus.textContent = "🧹 已全部清除"; // 4. 變更狀態提示文字
+  watchlistInput.value = "";
+  localStorage.removeItem("lohas_watchlist");
+  watchlistResult.innerHTML = "";
+  watchlistStatus.textContent = "🧹 已全部清除";
 });
 
 fetchSymbolBtn.addEventListener("click", async () => {

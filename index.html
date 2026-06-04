@@ -18,7 +18,7 @@
       }
       .watchlist-item:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
       
-      /* 💡 新增：讓並排的按鈕在小螢幕時也能完美呈現的 RWD 樣式 */
+      /* 讓並排的按鈕在小螢幕時也能完美呈現的 RWD 樣式 */
       .watchlist-actions {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -33,18 +33,18 @@
     </style>
   </head>
   <body>
-    <main class=\"app-shell\">
-      <aside class=\"controls\">
-        <div class=\"brand\">
+    <main class="app-shell">
+      <aside class="controls">
+        <div class="brand">
           <p>Stock LOHAS Staff</p>
           <h1>股市樂活五線譜產生器</h1>
         </div>
 
-        <section class=\"panel\">
-          <h2 style=\"margin-top:0\">自訂監控清單 (最多10支)</h2>
+        <section class="panel">
+          <h2 style="margin-top:0">自訂監控清單 (最多10支)</h2>
           <label>
             輸入代號 (用逗點隔開)
-            <input id=\"watchlistInput\" type=\"text\" value=\"2330, 2412, 0050, 2882, AAPL\" />
+            <input id="watchlistInput" type="text" value="2330, 2412, 0050, 2882, AAPL" />
           </label>
           
           <div class="watchlist-actions">
@@ -94,9 +94,9 @@
       <section class="workspace">
         <header class="summary">
           <div><p id="rangeText">--</p><h2 id="chartTitle">請選擇標的</h2></div>
-          <div class="status-card"><span>目前位階</span><strong id=\"zoneText\">--</strong></div>
-          <div class="status-card"><span>收盤價</span><strong id=\"closeText\">--</strong></div>
-          <div class="status-card"><span>R²</span><strong id=\"r2Text\">--</strong></div>
+          <div class="status-card"><span>目位階</span><strong id="zoneText">--</strong></div>
+          <div class="status-card"><span>收盤價</span><strong id="closeText">--</strong></div>
+          <div class="status-card"><span>R²</span><strong id="r2Text">--</strong></div>
         </header>
         <div class="chart-card"><div id="chart" class="chart"></div></div>
         <section class="table-card">
