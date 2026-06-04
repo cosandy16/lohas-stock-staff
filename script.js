@@ -28,6 +28,14 @@ const levelDefs = [
   { key: "minus2", label: "-2SD 悲觀線", color: "#12614a" },
 ];
 
+// --- 💡 網頁載入時，自動讀取上次儲存的 10 檔股票 ---
+document.addEventListener("DOMContentLoaded", () => {
+  const savedWatchlist = localStorage.getItem("lohas_watchlist");
+  if (savedWatchlist) {
+    watchlistInput.value = savedWatchlist;
+  }
+});
+
 // --- 核心運算 ---
 function regression(values) {
   const n = values.length;
@@ -92,27 +100,13 @@ function priceZone(p) {
   return "悲觀區下緣";
 }
 
-// 修改後的價格區間描述函式
 function getPriceRangeDesc(p) {
-  const f = formatPrice; // 簡寫方便閱讀
-  
-  if (p.close >= p.plus2) {
-    return `> ${f(p.plus2)} (+2SD 樂觀線)`;
-  }
-  if (p.close >= p.plus1) {
-    return `${f(p.plus1)} (相對樂觀) ~ ${f(p.plus2)} (樂觀)`;
-  }
-  if (p.close >= p.mid) {
-    return `${f(p.mid)} (中線) ~ ${f(p.plus1)} (相對樂觀)`;
-  }
-  if (p.close >= p.minus1) {
-    return `${f(p.minus1)} (相對悲觀) ~ ${f(p.mid)} (中線)`;
-  }
-  if (p.close >= p.minus2) {
-    return `${f(p.minus2)} (悲觀) ~ ${f(p.minus1)} (相對悲觀)`;
-  }
-  
-  // 低於 -2SD
+  const f = formatPrice; 
+  if (p.close >= p.plus2) return `> ${f(p.plus2)} (+2SD 樂觀線)`;
+  if (p.close >= p.plus1) return `${f(p.plus1)} (相對樂觀) ~ ${f(p.plus2)} (樂觀)`;
+  if (p.close >= p.mid) return `${f(p.mid)} (中線) ~ ${f(p.plus1)} (相對樂觀)`;
+  if (p.close >= p.minus1) return `${f(p.minus1)} (相對悲觀) ~ ${f(p.mid)} (中線)`;
+  if (p.close >= p.minus2) return `${f(p.minus2)} (悲觀) ~ ${f(p.minus1)} (相對悲觀)`;
   return `< ${f(p.minus2)} (-2SD 悲觀線)`;
 }
 
@@ -166,7 +160,12 @@ async function fetchLevelForWatchlist(symbol) {
 }
 
 btnWatchlist.addEventListener("click", async () => {
-  const syms = watchlistInput.value.split(",").map(s => s.trim()).filter(s => s).slice(0, 10);
+  const rawInput = watchlistInput.value;
+  
+  // 💡 點擊按鈕時，自動將輸入框內的代碼儲存在瀏覽器中
+  localStorage.setItem("lohas_watchlist", rawInput);
+
+  const syms = rawInput.split(",").map(s => s.trim()).filter(s => s).slice(0, 10);
   watchlistResult.innerHTML = "";
   watchlistStatus.textContent = "🔍 正在掃描區間...";
   btnWatchlist.disabled = true;
@@ -175,32 +174,29 @@ btnWatchlist.addEventListener("click", async () => {
     try {
       const { sym, last } = await fetchLevelForWatchlist(s);
       
-      // 根據題目與五線譜邏輯定義買進/賣出狀態：
-      // 買進條件：低於或等於 -1SD 相對悲觀線 (包含相對悲觀區、悲觀區下緣)
-      // 賣出條件：高於或等於 +1SD 相對樂觀線 (包含相對樂觀區、樂觀區上緣)
-      const isBuySignal = last.close <= last.minus1;
-      const isSellSignal = last.close >= last.plus1;
+      // 💡 核心修改：精確定義只有最頂跟最底兩個狀態觸發特殊色
+      const isSellSignal = last.close >= last.plus2; // 只有高於等於 +2SD (樂觀區上緣)
+      const isBuySignal = last.close <= last.minus2; // 只有低於等於 -2SD (悲觀區下緣)
 
       const item = document.createElement("div");
       item.className = "watchlist-item";
 
-      // --- 核心修改：動態塗色處理 ---
       if (isBuySignal) {
-        // 買進 (相對悲觀區下緣)：塗上柔和的淡綠色背景，文字和說明改成深綠色與適當顏色以利閱讀
+        // 🟢 悲觀區下緣：塗上淡綠色背景、深綠色左邊框
         item.style.backgroundColor = "#e8f5e9";
         item.style.border = "1px solid #a5d6a7";
         item.style.borderLeft = "6px solid #12614a";
       } else if (isSellSignal) {
-        // 賣出 (相對樂觀區上緣)：塗上柔和的淡紅色背景
+        // 🔴 樂觀區上緣：塗上淡紅色背景、深紅色左邊框
         item.style.backgroundColor = "#ffebee";
         item.style.border = "1px solid #ffcdd2";
         item.style.borderLeft = "6px solid #c94b4b";
       } else {
-        // 正常觀望區間：維持原本樣式
+        // ⚪ 其它一般區間：維持原本設計（白底、藍色邊框）
         item.style.borderLeft = "6px solid #2c6ebd";
       }
 
-      // 決定文字顏色 (若有背景色，文字顏色也稍微加深方便閱讀)
+      // 動態調整狀態文字顏色與小字字體顏色
       const zoneColor = isSellSignal ? '#c94b4b' : (isBuySignal ? '#12614a' : '#2c6ebd');
       const smallTextColor = (isBuySignal || isSellSignal) ? '#333333' : '#666666';
 
