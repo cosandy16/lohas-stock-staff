@@ -45,146 +45,107 @@ def parse_number(value):
         return None
 
 
-def fetch_twse_stock_day(stock_no, years):
-    if not re.fullmatch(r"\d{4,6}", stock_no):
-        raise ValueError("股票代號格式不正確，請輸入 4 到 6 位數字。")
-
-    today = date.today()
-    start = today - timedelta(days=round(float(years) * 365))
-    rows = {}
-
-    for month in month_range(start, today):
-        api_date = f"{month.year}{month.month:02d}01"
-        url = (
-            "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
-            f"?response=json&date={api_date}&stockNo={stock_no}"
-        )
-        payload = fetch_json(url)
-
-        if payload.get("stat") not in {"OK", "很抱歉，沒有符合條件的資料!"}:
-            continue
-
-        for item in payload.get("data", []):
-            # TWSE STOCK_DAY columns: date, volume, value, open, high, low, close, change, transactions.
-            close = parse_number(item[6]) if len(item) > 6 else None
-            if close is None:
-                continue
-            row_date = parse_twse_date(item[0])
-            if row_date >= start.isoformat():
-                rows[row_date] = close
-
-    ordered = [{"date": key, "close": rows[key]} for key in sorted(rows)]
-    if not ordered:
-        raise ValueError("查不到資料，請確認股票代號或稍後再試。")
-    return ordered
-
-
-def fetch_yahoo_stock_day(stock_no, years):
-    return fetch_yahoo_symbol(f"{stock_no}.TW", years)
-
-
+# 💡 智慧防呆：優化代號正規化邏輯
 def normalize_yahoo_symbol(raw_symbol, market):
-    symbol = raw_symbol.strip().upper()
-    if not re.fullmatch(r"[A-Z0-9.^=-]{1,18}", symbol):
-        raise ValueError("股票代號格式不正確。")
-
-    if market == "tw":
-        if not re.fullmatch(r"\d{4,6}", symbol):
-            raise ValueError("台股上市請輸入 4 到 6 位數字，例如 2330。")
-        return f"{symbol}.TW"
-    if market == "two":
-        if not re.fullmatch(r"\d{4,6}", symbol):
-            raise ValueError("台股上櫃請輸入 4 到 6 位數字，例如 6488。")
-        return f"{symbol}.TWO"
-    return symbol
+    sym = raw_symbol.strip().upper()
+    if "." in sym:
+        return sym
+    
+    # 如果純數字，先根據傳入的 market 給予預設後綴
+    if re.match(r"^\d+$", sym):
+        if market == "two":
+            return f"{sym}.TWO"
+        return f"{sym}.TW"
+    return sym
 
 
-def fetch_yahoo_symbol(symbol, years):
-    period2 = int(time.time())
-    period1 = period2 - round(float(years) * 365 * 24 * 60 * 60)
-    url = (
-        "https://query1.finance.yahoo.com/v8/finance/chart/"
-        f"{urllib.parse.quote(symbol)}?period1={period1}&period2={period2}"
-        "&interval=1d&events=history&includeAdjustedClose=true"
-    )
-    payload = fetch_json(url)
-    result = payload.get("chart", {}).get("result") or []
-    if not result:
-        error = payload.get("chart", {}).get("error", {})
-        raise ValueError(error.get("description") or "Yahoo Finance 查不到資料。")
+# 💡 核心優化：串接 Yahoo API 的下載函式，加入上市/上櫃自動交叉容錯機制
+def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
+    try:
+        years = float(years_str)
+    except ValueError:
+        years = 3.5
 
-    item = result[0]
-    timestamps = item.get("timestamp") or []
-    quote = ((item.get("indicators") or {}).get("quote") or [{}])[0]
-    closes = quote.get("close") or []
-    rows = []
+    # 1. 決定要嘗試的代號順序
+    sym = raw_symbol.strip().upper()
+    symbols_to_try = []
 
-    for ts, close in zip(timestamps, closes):
-        if close is None:
-            continue
-        row_date = date.fromtimestamp(ts).isoformat()
-        rows.append({"date": row_date, "close": round(float(close), 4)})
+    if "." in sym:
+        symbols_to_try.append(sym)
+    elif re.match(r"^\d+$", sym):
+        # 如果是純數字，且使用者選 two，優先嘗試 .TWO，失敗再試 .TW
+        if market == "two":
+            symbols_to_try = [f"{sym}.TWO", f"{sym}.TW"]
+        else:
+            symbols_to_try = [f"{sym}.TW", f"{sym}.TWO"]
+    else:
+        symbols_to_try.append(sym)
 
-    if not rows:
-        raise ValueError("查不到有效收盤價，請確認代號是否為 Yahoo Finance 支援的代號。")
-    return rows
-
-
-def fetch_json(url):
-    current = url
-    for _ in range(5):
-        request = urllib.request.Request(
-            current,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-                "Accept": "application/json,text/plain,*/*",
-                "Referer": "https://www.twse.com.tw/",
-            },
-        )
+    # 2. 開始依序嘗試下載
+    last_exception = None
+    for yahoo_symbol in symbols_to_try:
         try:
-            with urllib.request.urlopen(request, timeout=12) as response:
-                return json.loads(response.read().decode("utf-8-sig"))
-        except HTTPError as exc:
-            if exc.code not in {301, 302, 303, 307, 308}:
-                raise
-            location = exc.headers.get("Location")
-            if not location:
-                raise
-            current = urllib.parse.urljoin(current, location)
-    raise ValueError("證交所資料轉址次數過多，請稍後再試。")
+            end_dt = date.today()
+            start_dt = end_dt - timedelta(days=int((years + 0.6) * 365))
+            period1 = int(time.mktime(start_dt.timetuple()))
+            period2 = int(time.mktime(end_dt.timetuple()))
+
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?period1={period1}&period2={period2}&interval=1d"
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            
+            with urllib.request.urlopen(req) as response:
+                res_data = json.loads(response.read().decode("utf-8"))
+                
+            chart_data = res_data.get("chart", {}).get("result", [])
+            if not chart_data:
+                raise ValueError("Yahoo Finance 回傳空資料")
+                
+            result = chart_data[0]
+            timestamps = result.get("timestamp", [])
+            indicators = result.get("indicators", {}).get("quote", [{}])[0]
+            closes = indicators.get("close", [])
+
+            rows = []
+            for t, c in zip(timestamps, closes):
+                if t is not None and c is not None:
+                    dt_str = date.fromtimestamp(t).isoformat()
+                    rows.append({"date": dt_str, "close": float(c)})
+            
+            if not rows:
+                raise ValueError("解析後無有效收盤價歷史紀錄")
+                
+            # 只要成功抓到，就直接回傳結果與實際成功的代號！
+            return yahoo_symbol, rows
+            
+        except Exception as e:
+            last_exception = e
+            print(f"嘗試抓取 {yahoo_symbol} 失敗，準備嘗試下一個可能性... 錯誤: {e}")
+            continue
+
+    # 如果都失敗了，才真正拋出異常
+    raise last_exception or ValueError("無法從 Yahoo Finance 取得任何資料")
 
 
 class Handler(BaseHTTPRequestHandler):
-    def send_json(self, status, body):
-        payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    def send_json(self, status, data):
+        content = json.dumps(data).encode("utf-8")
         self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(content)))
         self.end_headers()
-        self.wfile.write(payload)
+        self.wfile.write(content)
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path == "/api/twse":
-            query = urllib.parse.parse_qs(parsed.query)
-            stock_no = query.get("stockNo", [""])[0].strip()
-            years = query.get("years", ["3.5"])[0]
-            try:
-                data = fetch_yahoo_stock_day(stock_no, years)
-                self.send_json(200, {"symbol": f"{stock_no}.TW", "source": "Yahoo Finance", "rows": data})
-            except Exception as exc:
-                self.send_json(400, {"error": str(exc)})
-            return
-
         if parsed.path == "/api/yahoo":
             query = urllib.parse.parse_qs(parsed.query)
             raw_symbol = query.get("symbol", [""])[0]
             market = query.get("market", ["tw"])[0]
             years = query.get("years", ["3.5"])[0]
             try:
-                yahoo_symbol = normalize_yahoo_symbol(raw_symbol, market)
-                data = fetch_yahoo_symbol(yahoo_symbol, years)
-                self.send_json(200, {"symbol": yahoo_symbol, "source": "Yahoo Finance", "rows": data})
+                # 💡 改用全新的智慧容錯交叉下載函式
+                actual_symbol, data = fetch_yahoo_symbol_with_retry(raw_symbol, market, years)
+                self.send_json(200, {"symbol": actual_symbol, "source": "Yahoo Finance", "rows": data})
             except Exception as exc:
                 self.send_json(400, {"error": str(exc)})
             return
@@ -209,6 +170,9 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     server = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"股市樂活五線譜已啟動：http://127.0.0.1:{PORT}/index.html")
-    print("手機請使用同一個 Wi-Fi 下的電腦 IPv4 位址連線，例如：http://192.168.1.23:8769/index.html")
-    server.serve_forever()
+    print(f"LOHAS Stock Staff Server started at http://{HOST}:{PORT}")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    server.server_close()
