@@ -92,7 +92,6 @@ function priceZone(p) {
   return "悲觀區下緣";
 }
 
-// 新增：取得價格區間描述的函式
 // 修改後的價格區間描述函式
 function getPriceRangeDesc(p) {
   const f = formatPrice; // 簡寫方便閱讀
@@ -175,17 +174,45 @@ btnWatchlist.addEventListener("click", async () => {
   for (const s of syms) {
     try {
       const { sym, last } = await fetchLevelForWatchlist(s);
-      const isUp = last.close >= last.plus2, isDown = last.close <= last.minus2;
+      
+      // 根據題目與五線譜邏輯定義買進/賣出狀態：
+      // 買進條件：低於或等於 -1SD 相對悲觀線 (包含相對悲觀區、悲觀區下緣)
+      // 賣出條件：高於或等於 +1SD 相對樂觀線 (包含相對樂觀區、樂觀區上緣)
+      const isBuySignal = last.close <= last.minus1;
+      const isSellSignal = last.close >= last.plus1;
+
       const item = document.createElement("div");
       item.className = "watchlist-item";
-      if (isUp) item.style.borderLeft = "6px solid #c94b4b";
-      if (isDown) item.style.borderLeft = "6px solid #12614a";
+
+      // --- 核心修改：動態塗色處理 ---
+      if (isBuySignal) {
+        // 買進 (相對悲觀區下緣)：塗上柔和的淡綠色背景，文字和說明改成深綠色與適當顏色以利閱讀
+        item.style.backgroundColor = "#e8f5e9";
+        item.style.border = "1px solid #a5d6a7";
+        item.style.borderLeft = "6px solid #12614a";
+      } else if (isSellSignal) {
+        // 賣出 (相對樂觀區上緣)：塗上柔和的淡紅色背景
+        item.style.backgroundColor = "#ffebee";
+        item.style.border = "1px solid #ffcdd2";
+        item.style.borderLeft = "6px solid #c94b4b";
+      } else {
+        // 正常觀望區間：維持原本樣式
+        item.style.borderLeft = "6px solid #2c6ebd";
+      }
+
+      // 決定文字顏色 (若有背景色，文字顏色也稍微加深方便閱讀)
+      const zoneColor = isSellSignal ? '#c94b4b' : (isBuySignal ? '#12614a' : '#2c6ebd');
+      const smallTextColor = (isBuySignal || isSellSignal) ? '#333333' : '#666666';
 
       item.innerHTML = `
-        <div><strong>${sym}</strong><br><small>現價: ${formatPrice(last.close)}</small></div>
+        <div>
+          <strong>${sym}</strong><br>
+          <small style="color:${smallTextColor}">現價: ${formatPrice(last.close)}</small>
+        </div>
         <div style="text-align:right;">
-          <span style="font-weight:900; color:${isUp ? '#c94b4b' : (isDown ? '#12614a' : '#2c6ebd')}">${priceZone(last)}</span>
-          <br><small style="color:#666">區間: ${getPriceRangeDesc(last)}</small>
+          <span style="font-weight:900; color:${zoneColor}">${priceZone(last)}</span>
+          <br>
+          <small style="color:${smallTextColor}">區間: ${getPriceRangeDesc(last)}</small>
         </div>
       `;
       watchlistResult.appendChild(item);
