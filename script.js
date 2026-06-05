@@ -20,6 +20,9 @@ const btnClearWatchlist = document.querySelector("#btnClearWatchlist");
 const watchlistResult = document.querySelector("#watchlistResult");
 const watchlistStatus = document.querySelector("#watchlistStatus");
 
+// 💡 隱存變數：用來暫存被清除的監控清單，提供 Restore 功能
+let deletedWatchlistBackup = "";
+
 const levelDefs = [
   { key: "plus2", label: "+2SD 樂觀線", color: "#c94b4b" },
   { key: "plus1", label: "+1SD 相對樂觀線", color: "#d9852b" },
@@ -28,12 +31,19 @@ const levelDefs = [
   { key: "minus2", label: "-2SD 悲觀線", color: "#12614a" },
 ];
 
-// --- 網頁載入時，自動讀取上次儲存的 10 檔股票 ---
+// --- 網頁載入時，自動讀取上次儲存的資料 ---
 document.addEventListener("DOMContentLoaded", () => {
+  // 讀取自訂監控清單
   const savedWatchlist = localStorage.getItem("lohas_watchlist");
   if (savedWatchlist) {
     watchlistInput.value = savedWatchlist;
   }
+
+  // 💡 1. 實現功能：自動讀取上一次詳細查詢的股票代號與市場選單
+  const savedLastSymbol = localStorage.getItem("lohas_last_symbol");
+  const savedLastMarket = localStorage.getItem("lohas_last_market");
+  if (savedLastSymbol) symbolInput.value = savedLastSymbol;
+  if (savedLastMarket) market.value = savedLastMarket;
 });
 
 // --- 核心運算 ---
@@ -145,6 +155,9 @@ function render() {
     if (closeText) closeText.textContent = formatPrice(last.close);
     if (r2Text) r2Text.textContent = last.r2.toFixed(3);
     
+    // 同步把完整的上下緣價格區間字串放到大標題上方的小字區
+    if (rangeText) rangeText.textContent = getPriceRangeDesc(last);
+    
     renderChart(analysis);
     if (levelsTable) {
       levelsTable.innerHTML = levelDefs.map(l => `<tr><td>${l.label}</td><td>${formatPrice(last[l.key])}</td><td>${priceZone(last) === l.label ? "●" : ""}</td></tr>`).join("");
@@ -221,15 +234,35 @@ btnWatchlist.addEventListener("click", async () => {
   btnWatchlist.disabled = false;
 });
 
-// 全部清除按鈕
+// 💡 2. 實現功能：「全部清除」按鈕結合智慧 RESTORE 復原機制
 btnClearWatchlist.addEventListener("click", () => {
-  watchlistInput.value = "";
-  localStorage.removeItem("lohas_watchlist");
-  watchlistResult.innerHTML = "";
-  watchlistStatus.textContent = "🧹 已全部清除";
+  if (btnClearWatchlist.textContent.includes("全部清除")) {
+    // 執行清除邏輯，並先將資料備份起來
+    deletedWatchlistBackup = watchlistInput.value;
+    
+    watchlistInput.value = "";
+    localStorage.removeItem("lohas_watchlist");
+    watchlistResult.innerHTML = "";
+    watchlistStatus.textContent = "🧹 已暫時清除，可點擊按鈕復原";
+    
+    // 切換按鈕狀態變為 Restore 狀態
+    btnClearWatchlist.textContent = "↩️ 復原清除清單";
+    btnClearWatchlist.style.backgroundColor = "#d9852b"; // 變成橘色提示可以復原
+  } else {
+    // 執行 Restore 復原邏輯
+    if (deletedWatchlistBackup) {
+      watchlistInput.value = deletedWatchlistBackup;
+      localStorage.setItem("lohas_watchlist", deletedWatchlistBackup);
+      watchlistStatus.textContent = "↩️ 已成功復原清單！";
+    }
+    
+    // 還原按鈕成原本的清除外觀
+    btnClearWatchlist.textContent = "🧹 全部清除";
+    btnClearWatchlist.style.backgroundColor = "#667085";
+  }
 });
 
-// --- 💡 修正：完全移除錯誤的隱藏元件，改為正確的標題名稱賦值 ---
+// --- 詳細單檔查詢按鈕 ---
 fetchSymbolBtn.addEventListener("click", async () => {
   fetchStatus.textContent = "讀取中...";
   
@@ -249,13 +282,17 @@ fetchSymbolBtn.addEventListener("click", async () => {
     
     csvInput.value = JSON.stringify(json.rows);
     
-    // 💡 關鍵修正點：直接將抓回來的真實股票代號（如 2330.TWO），放進畫面的 chartTitle 標題中
     if (chartTitle) {
       chartTitle.textContent = json.symbol;
     }
     
     render();
     fetchStatus.textContent = "成功";
+
+    // 💡 1. 實現功能：當成功抓到資料後，就將此代號與市場存進瀏覽器記憶庫中
+    localStorage.setItem("lohas_last_symbol", inputVal);
+    localStorage.setItem("lohas_last_market", selectedMarket);
+
   } catch (err) { 
     fetchStatus.textContent = "失敗"; 
     console.error("Fetch 錯誤資訊:", err);
