@@ -20,7 +20,11 @@ const btnClearWatchlist = document.querySelector("#btnClearWatchlist");
 const watchlistResult = document.querySelector("#watchlistResult");
 const watchlistStatus = document.querySelector("#watchlistStatus");
 
-// 💡 隱存變數：用來暫存被清除的監控清單，提供 Restore 功能
+// 💡 新增：匯出與匯入的按鈕 DOM
+const btnExportWatchlist = document.querySelector("#btnExportWatchlist");
+const btnImportWatchlist = document.querySelector("#btnImportWatchlist");
+
+// 隱存變數：用來暫存被清除的監控清單，提供 Undo 功能
 let deletedWatchlistBackup = "";
 
 const levelDefs = [
@@ -33,13 +37,11 @@ const levelDefs = [
 
 // --- 網頁載入時，自動讀取上次儲存的資料 ---
 document.addEventListener("DOMContentLoaded", () => {
-  // 讀取自訂監控清單
   const savedWatchlist = localStorage.getItem("lohas_watchlist");
   if (savedWatchlist) {
     watchlistInput.value = savedWatchlist;
   }
 
-  // 💡 1. 實現功能：自動讀取上一次詳細查詢的股票代號與市場選單
   const savedLastSymbol = localStorage.getItem("lohas_last_symbol");
   const savedLastMarket = localStorage.getItem("lohas_last_market");
   if (savedLastSymbol) symbolInput.value = savedLastSymbol;
@@ -154,8 +156,6 @@ function render() {
     }
     if (closeText) closeText.textContent = formatPrice(last.close);
     if (r2Text) r2Text.textContent = last.r2.toFixed(3);
-    
-    // 同步把完整的上下緣價格區間字串放到大標題上方的小字區
     if (rangeText) rangeText.textContent = getPriceRangeDesc(last);
     
     renderChart(analysis);
@@ -183,12 +183,19 @@ btnWatchlist.addEventListener("click", async () => {
   const rawInput = watchlistInput.value;
   localStorage.setItem("lohas_watchlist", rawInput);
 
-  const syms = rawInput.split(",").map(s => s.trim()).filter(s => s).slice(0, 10);
+  // 💡 修正點：上限拉升至 15 支
+  const syms = rawInput.split(",").map(s => s.trim()).filter(s => s).slice(0, 15);
+  const totalStocks = syms.length;
+
   watchlistResult.innerHTML = "";
-  watchlistStatus.textContent = "🔍 正在掃描區間...";
   btnWatchlist.disabled = true;
 
+  let currentIndex = 0;
   for (const s of syms) {
+    currentIndex++;
+    // 💡 修正點：進度條文字優化，讓使用者在等待 15 支抓取時有心理預期
+    watchlistStatus.textContent = `🔍 正在掃描區間... (${currentIndex} / ${totalStocks})`;
+
     try {
       const { sym, last } = await fetchLevelForWatchlist(s);
       
@@ -230,42 +237,71 @@ btnWatchlist.addEventListener("click", async () => {
     }
     await new Promise(r => setTimeout(r, 500));
   }
-  watchlistStatus.textContent = "✅ 掃描完成";
+  watchlistStatus.textContent = `✅ 掃描完成 (共 ${totalStocks} 檔)`;
   btnWatchlist.disabled = false;
 });
 
-// 💡 2. 實現功能：「全部清除」按鈕結合智慧 RESTORE 復原機制
+// 全部清除與復原按鈕
 btnClearWatchlist.addEventListener("click", () => {
   if (btnClearWatchlist.textContent.includes("全部清除")) {
-    // 執行清除邏輯，並先將資料備份起來
     deletedWatchlistBackup = watchlistInput.value;
-    
     watchlistInput.value = "";
     localStorage.removeItem("lohas_watchlist");
     watchlistResult.innerHTML = "";
     watchlistStatus.textContent = "🧹 已暫時清除，可點擊按鈕復原";
     
-    // 切換按鈕狀態變為 Restore 狀態
     btnClearWatchlist.textContent = "↩️ 復原清除清單";
-    btnClearWatchlist.style.backgroundColor = "#d9852b"; // 變成橘色提示可以復原
+    btnClearWatchlist.style.backgroundColor = "#d9852b"; 
   } else {
-    // 執行 Restore 復原邏輯
     if (deletedWatchlistBackup) {
       watchlistInput.value = deletedWatchlistBackup;
       localStorage.setItem("lohas_watchlist", deletedWatchlistBackup);
       watchlistStatus.textContent = "↩️ 已成功復原清單！";
     }
-    
-    // 還原按鈕成原本的清除外觀
     btnClearWatchlist.textContent = "🧹 全部清除";
     btnClearWatchlist.style.backgroundColor = "#667085";
   }
 });
 
+// 💡 新增：1. 📥 匯出目前清單功能 (自動複製到剪貼簿)
+btnExportWatchlist.addEventListener("click", (e) => {
+  e.preventDefault(); // 防止網頁跳轉
+  const currentText = watchlistInput.value.trim();
+  if (!currentText) {
+    watchlistStatus.textContent = "⚠️ 目前清單是空的，無法匯出喔！";
+    return;
+  }
+  
+  // 利用現代瀏覽器 API 將文字複製到剪貼簿
+  navigator.clipboard.writeText(currentText).then(() => {
+    watchlistStatus.textContent = "📋 清單已自動複製到剪貼簿！可貼至記事本備份。";
+  }).catch(err => {
+    watchlistStatus.textContent = "❌ 複製失敗，請手動複製輸入框文字。";
+  });
+});
+
+// 💡 新增：2. 📤 匯入歷史清單功能 (彈出提示框輸入)
+btnImportWatchlist.addEventListener("click", (e) => {
+  e.preventDefault(); // 防止網頁跳轉
+  const userInput = prompt("請貼上您先前匯出的股票代號（請用逗點隔開）：");
+  
+  if (userInput === null) return; // 使用者按了取消
+  
+  const cleanedInput = userInput.trim();
+  if (!cleanedInput) {
+    alert("輸入內容為空，取消匯入。");
+    return;
+  }
+  
+  watchlistInput.value = cleanedInput;
+  localStorage.setItem("lohas_watchlist", cleanedInput);
+  watchlistResult.innerHTML = ""; // 乾淨清空舊畫面的結果卡片
+  watchlistStatus.textContent = "📥 歷史清單匯入成功！點擊下方按鈕即可重新掃描。";
+});
+
 // --- 詳細單檔查詢按鈕 ---
 fetchSymbolBtn.addEventListener("click", async () => {
   fetchStatus.textContent = "讀取中...";
-  
   let inputVal = symbolInput.value.trim().toUpperCase();
   let selectedMarket = market.value;
 
@@ -279,7 +315,6 @@ fetchSymbolBtn.addEventListener("click", async () => {
     const res = await fetch(`/api/yahoo?${p.toString()}`);
     if (!res.ok) throw new Error();
     const json = await res.json();
-    
     csvInput.value = JSON.stringify(json.rows);
     
     if (chartTitle) {
@@ -288,11 +323,8 @@ fetchSymbolBtn.addEventListener("click", async () => {
     
     render();
     fetchStatus.textContent = "成功";
-
-    // 💡 1. 實現功能：當成功抓到資料後，就將此代號與市場存進瀏覽器記憶庫中
     localStorage.setItem("lohas_last_symbol", inputVal);
     localStorage.setItem("lohas_last_market", selectedMarket);
-
   } catch (err) { 
     fetchStatus.textContent = "失敗"; 
     console.error("Fetch 錯誤資訊:", err);

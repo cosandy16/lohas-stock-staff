@@ -16,17 +16,41 @@
         align-items: center;
         transition: transform 0.2s;
       }
-      .watchlist-item:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }\n      \n      /* 讓並排的按鈕在小螢幕時也能完美呈現的 RWD 樣式 */
+      .watchlist-item:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+      
       .watchlist-actions {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 8px;
       }
       #btnClearWatchlist {
-        background-color: #667085; /* 採用與原系統 --muted 接近的質感灰色 */
+        background-color: #667085;
       }
       #btnClearWatchlist:hover {
         background-color: #475467;
+      }
+
+      /* 💡 新增：防止 15 檔股票卡片把控制面板撐到過長的滾動區塊樣式 */
+      #watchlistResult {
+        max-height: 450px;
+        overflow-y: auto;
+        padding-right: 4px;
+        display: grid;
+        gap: 8px;
+      }
+      
+      /* 讓滾動條看起來更精緻 */
+      #watchlistResult::-webkit-scrollbar { width: 6px; }
+      #watchlistResult::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 3px; }
+
+      /* 匯出匯入超連結按鈕樣式 */
+      .watchlist-io-links a {
+        color: var(--blue);
+        text-decoration: none;
+        font-weight: bold;
+      }
+      .watchlist-io-links a:hover {
+        text-decoration: underline;
       }
     </style>
   </head>
@@ -39,17 +63,23 @@
         </div>
 
         <section class="panel">
-          <h2 style=\"margin-top:0\">自訂監控清單 (最多10支)</h2>
+          <h2 style="margin-top:0">自訂監控清單 (最多15支)</h2>
           <label>
             輸入代號 (用逗點隔開)
             <input id="watchlistInput" type="text" value="2330, 2412, 0050, 2882, AAPL" />
           </label>
-          <div class="watchlist-actions" style="margin-top: 10px;">
+          
+          <div class="watchlist-io-links" style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 0.8rem;">
+            <a href="#" id="btnExportWatchlist">export 📤 匯出目前清單</a>
+            <a href="#" id="btnImportWatchlist">restore 📥 匯入歷史清單</a>
+          </div>
+
+          <div class="watchlist-actions" style="margin-top: 12px;">
             <button id="btnWatchlist" style="width: 100%;">🔍 執行批量掃描</button>
             <button id="btnClearWatchlist" style="width: 100%; color: white; border: none; border-radius: 6px; cursor: pointer;">🧹 全部清除</button>
           </div>
-          <div id="watchlistStatus" style="margin-top: 10px; font-weight: bold; color: var(--blue);"></div>
-          <div id="watchlistResult" style="margin-top: 12px; display: grid; gap: 8px;"></div>
+          <div id="watchlistStatus" style="margin-top: 10px; font-weight: bold; color: var(--blue); font-size: 0.9rem;"></div>
+          <div id="watchlistResult"></div>
         </section>
 
         <section class="panel">
@@ -78,7 +108,7 @@
         </section>
 
         <section class="panel">
-          <textarea id="csvInput" rows=\"3\" style="display:none;"></textarea>
+          <textarea id="csvInput" rows="3" style="display:none;"></textarea>
           <button id="sampleBtn" style="width:100%">載入模擬範例</button>
         </section>
       </aside>
