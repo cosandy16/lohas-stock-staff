@@ -14,7 +14,7 @@ const TW_STOCK_NAMES = {
   "2409":"友達","2412":"中華電","2414":"精技","2420":"新日興","2423":"固緯",
   "2426":"鑫創","2429":"銘異","2430":"燦坤","2439":"美律","2441":"超豐",
   "2449":"京元電","2454":"聯發科","2458":"義隆","2474":"可成","2475":"矽創",
-  "2481":"強茂","2489":"瑞軒","2492":"華新科","2496":"卓越","2498":"宏達電",
+  "2481":"強茂","2489":"舉辦","2492":"華新科","2496":"卓越","2498":"宏達電",
   "2501":"國建","2502":"長谷","2542":"興富發","2545":"皇翔","2548":"華固",
   "2601":"益航","2603":"長榮","2606":"裕民","2609":"陽明","2610":"華航",
   "2615":"萬海","2618":"長榮航","2707":"晶華","2727":"王品","2731":"雄獅",
@@ -298,6 +298,8 @@ btnWatchlist.addEventListener("click", async () => {
 
       const item = document.createElement("div");
       item.className = "watchlist-item";
+      // 💡 新增：讓滑鼠移上去時顯示手勢，暗示使用者「可以點擊」
+      item.style.cursor = "pointer";
 
       if (isBuySignal) {
         item.style.backgroundColor = "#e8f5e9";
@@ -317,20 +319,39 @@ btnWatchlist.addEventListener("click", async () => {
       const cleanSymForDisplay = sym.toUpperCase();
       const stockName = getStockName(cleanSymForDisplay);
       
-      // 💡 修正排版：移除了強制作為換行的 <br>，將代號與名稱緊貼在一起
       item.innerHTML = `
-        <div style="display: flex; flex-direction: column; gap: 4px; max-width: 55%;">
+        <div style="display: flex; flex-direction: column; gap: 4px; max-width: 55%; pointer-events: none;">
           <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
             <strong>${cleanSymForDisplay}</strong>${stockName ? `<span style="color:#222; font-weight:800; font-size:0.9em; margin-left:6px;">${stockName}</span>` : ""}
           </div>
           <small style="color:${smallTextColor}">現價: ${formatPrice(last.close)}</small>
         </div>
-        <div style="text-align:right;">
+        <div style="text-align:right; pointer-events: none;">
           <span style="font-weight:900; color:${zoneColor}">${priceZone(last)}</span>
           <br>
           <small style="color:${smallTextColor}">區間: ${getPriceRangeDesc(last)}</small>
         </div>
       `;
+
+      // 💡 關鍵聯動實作：當使用者點擊這個卡片時
+      item.addEventListener("click", () => {
+        // 1. 自動填入股票代號輸入框
+        const codeOnly = cleanSymForDisplay.replace(".TW", "").replace(".TWO", "");
+        symbolInput.value = codeOnly;
+        
+        // 2. 自動判斷市場選單
+        if (cleanSymForDisplay.includes(".TWO")) {
+          market.value = "two";
+        } else if (cleanSymForDisplay.includes(".TW")) {
+          market.value = "tw";
+        } else {
+          market.value = "us";
+        }
+
+        // 3. 直接模擬點擊右側的「查詢」按鈕來更新大圖
+        fetchSymbolBtn.click();
+      });
+
       watchlistResult.appendChild(item);
     } catch {
       watchlistResult.innerHTML += `<div style="color:red; font-size:0.8rem; padding:8px;">❌ ${s} 失敗</div>`;
