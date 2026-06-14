@@ -13,18 +13,18 @@ const closeText = document.querySelector("#closeText");
 const r2Text = document.querySelector("#r2Text");
 const levelsTable = document.querySelector("#levelsTable");
 
-// 監控清單 DOM
+// 監控清單相關 DOM
 const watchlistInput = document.querySelector("#watchlistInput");
 const btnWatchlist = document.querySelector("#btnWatchlist");
 const btnClearWatchlist = document.querySelector("#btnClearWatchlist");
 const watchlistResult = document.querySelector("#watchlistResult");
 const watchlistStatus = document.querySelector("#watchlistStatus");
 
-// 💡 新增：匯出與匯入的按鈕 DOM
+// 匯出與匯入按鈕 DOM
 const btnExportWatchlist = document.querySelector("#btnExportWatchlist");
 const btnImportWatchlist = document.querySelector("#btnImportWatchlist");
 
-// 隱存變數：用來暫存被清除的監控清單，提供 Undo 功能
+// 💡 隱存變數：用來暫存被清除的監控清單，提供一鍵後悔 (Undo/Restore) 功能
 let deletedWatchlistBackup = "";
 
 const levelDefs = [
@@ -35,20 +35,22 @@ const levelDefs = [
   { key: "minus2", label: "-2SD 悲觀線", color: "#12614a" },
 ];
 
-// --- 網頁載入時，自動讀取上次儲存的資料 ---
+// --- 💡 網頁載入初始化：自動讀取上次儲存的資料 ---
 document.addEventListener("DOMContentLoaded", () => {
+  // 1. 自動填入儲存的自訂監控清單
   const savedWatchlist = localStorage.getItem("lohas_watchlist");
   if (savedWatchlist) {
     watchlistInput.value = savedWatchlist;
   }
 
+  // 2. 自動還原上一次詳細查詢的股票代號與市場選單
   const savedLastSymbol = localStorage.getItem("lohas_last_symbol");
   const savedLastMarket = localStorage.getItem("lohas_last_market");
   if (savedLastSymbol) symbolInput.value = savedLastSymbol;
   if (savedLastMarket) market.value = savedLastMarket;
 });
 
-// --- 核心運算 ---
+// --- 統計學核心：線性/對數回歸運算 ---
 function regression(values) {
   const n = values.length;
   const sumX = values.reduce((s, p) => s + p.x, 0);
@@ -71,6 +73,7 @@ function regression(values) {
   return { intercept, slope, sd, r2 };
 }
 
+// 建立五線譜數據結構
 function buildAnalysis(data, currentMode = modelMode.value, currentYears = periodYears.value) {
   const years = (currentYears === "all") ? 10 : Number(currentYears);
   const lastDate = new Date(data[data.length - 1].date);
@@ -103,6 +106,7 @@ function buildAnalysis(data, currentMode = modelMode.value, currentYears = perio
   });
 }
 
+// 定義目前位階
 function priceZone(p) {
   if (p.close >= p.plus2) return "樂觀區上緣";
   if (p.close >= p.plus1) return "相對樂觀區";
@@ -112,6 +116,7 @@ function priceZone(p) {
   return "悲觀區下緣";
 }
 
+// 產生詳細區間數值描述
 function getPriceRangeDesc(p) {
   const f = formatPrice; 
   if (p.close >= p.plus2) return `> ${f(p.plus2)} (+2SD 樂觀線)`;
@@ -122,9 +127,10 @@ function getPriceRangeDesc(p) {
   return `< ${f(p.minus2)} (-2SD 悲觀線)`;
 }
 
+// 格式化價格數值顯示
 function formatPrice(v) { return Number(v).toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
-// --- 繪圖 ---
+// --- 繪製 SVG 線圖 ---
 function renderChart(analysis) {
   const width = 1000, height = 500;
   const margin = { top: 30, right: 60, bottom: 40, left: 60 };
@@ -144,6 +150,7 @@ function renderChart(analysis) {
   `;
 }
 
+// 渲染大圖表及頂部資訊卡片
 function render() {
   try {
     const data = JSON.parse(csvInput.value);
@@ -167,11 +174,18 @@ function render() {
   }
 }
 
-// --- 監控清單 ---
+// --- 監控清單非同步請求處理 ---
 async function fetchLevelForWatchlist(symbol) {
   let finalSym = symbol.trim().toUpperCase();
+  // 如果是純數字且沒帶後綴，依據輸入習慣預設補 .TW
   if (!finalSym.includes(".") && /^\d+$/.test(finalSym)) finalSym += ".TW";
-  const p = new URLSearchParams({ symbol: finalSym.replace(".TW","").replace(".TWO",""), market: finalSym.includes(".TWO") ? "two" : (finalSym.includes(".TW") ? "tw" : "us"), years: "3.5" });
+  
+  const isTwo = finalSym.includes(".TWO");
+  const isTw = finalSym.includes(".TW");
+  const marketParam = isTwo ? "two" : (isTw ? "tw" : "us");
+  const pureSym = finalSym.replace(".TW","").replace(".TWO","");
+
+  const p = new URLSearchParams({ symbol: pureSym, market: marketParam, years: "3.5" });
   const res = await fetch(`/api/yahoo?${p.toString()}`);
   if (!res.ok) throw new Error();
   const json = await res.json();
@@ -179,11 +193,12 @@ async function fetchLevelForWatchlist(symbol) {
   return { sym: json.symbol, last: analysis[analysis.length - 1] };
 }
 
+// 批量執行監控清單掃描
 btnWatchlist.addEventListener("click", async () => {
   const rawInput = watchlistInput.value;
   localStorage.setItem("lohas_watchlist", rawInput);
 
-  // 💡 修正點：上限拉升至 15 支
+  // 正式放寬至 15 檔上限
   const syms = rawInput.split(",").map(s => s.trim()).filter(s => s).slice(0, 15);
   const totalStocks = syms.length;
 
@@ -193,7 +208,6 @@ btnWatchlist.addEventListener("click", async () => {
   let currentIndex = 0;
   for (const s of syms) {
     currentIndex++;
-    // 💡 修正點：進度條文字優化，讓使用者在等待 15 支抓取時有心理預期
     watchlistStatus.textContent = `🔍 正在掃描區間... (${currentIndex} / ${totalStocks})`;
 
     try {
@@ -205,6 +219,7 @@ btnWatchlist.addEventListener("click", async () => {
       const item = document.createElement("div");
       item.className = "watchlist-item";
 
+      // 只有悲觀區下緣及樂觀區上緣才會塗色
       if (isBuySignal) {
         item.style.backgroundColor = "#e8f5e9";
         item.style.border = "1px solid #a5d6a7";
@@ -235,44 +250,47 @@ btnWatchlist.addEventListener("click", async () => {
     } catch {
       watchlistResult.innerHTML += `<div style="color:red; font-size:0.8rem; padding:8px;">❌ ${s} 失敗</div>`;
     }
+    // 預防 Yahoo 限流限制，間隔發送
     await new Promise(r => setTimeout(r, 500));
   }
   watchlistStatus.textContent = `✅ 掃描完成 (共 ${totalStocks} 檔)`;
   btnWatchlist.disabled = false;
 });
 
-// 全部清除與復原按鈕
+// 全部清除與後悔復原 (Clean & Restore) 智慧雙模按鈕
 btnClearWatchlist.addEventListener("click", () => {
   if (btnClearWatchlist.textContent.includes("全部清除")) {
+    // 執行清除邏輯：備份、清空 DOM 及 LocalStorage
     deletedWatchlistBackup = watchlistInput.value;
     watchlistInput.value = "";
     localStorage.removeItem("lohas_watchlist");
     watchlistResult.innerHTML = "";
     watchlistStatus.textContent = "🧹 已暫時清除，可點擊按鈕復原";
     
+    // 切換為復原按鈕與橘色警告背景
     btnClearWatchlist.textContent = "↩️ 復原清除清單";
     btnClearWatchlist.style.backgroundColor = "#d9852b"; 
   } else {
+    // 執行復原邏輯：還原備份資料
     if (deletedWatchlistBackup) {
       watchlistInput.value = deletedWatchlistBackup;
       localStorage.setItem("lohas_watchlist", deletedWatchlistBackup);
       watchlistStatus.textContent = "↩️ 已成功復原清單！";
     }
+    // 還原回常規清除按鈕與質感灰色背景
     btnClearWatchlist.textContent = "🧹 全部清除";
     btnClearWatchlist.style.backgroundColor = "#667085";
   }
 });
 
-// 💡 新增：1. 📥 匯出目前清單功能 (自動複製到剪貼簿)
+// 一鍵匯出清單功能 (自動寫入剪貼簿)
 btnExportWatchlist.addEventListener("click", (e) => {
-  e.preventDefault(); // 防止網頁跳轉
+  e.preventDefault();
   const currentText = watchlistInput.value.trim();
   if (!currentText) {
     watchlistStatus.textContent = "⚠️ 目前清單是空的，無法匯出喔！";
     return;
   }
-  
-  // 利用現代瀏覽器 API 將文字複製到剪貼簿
   navigator.clipboard.writeText(currentText).then(() => {
     watchlistStatus.textContent = "📋 清單已自動複製到剪貼簿！可貼至記事本備份。";
   }).catch(err => {
@@ -280,26 +298,23 @@ btnExportWatchlist.addEventListener("click", (e) => {
   });
 });
 
-// 💡 新增：2. 📤 匯入歷史清單功能 (彈出提示框輸入)
+// 一鍵匯入清單功能 (Prompt 彈窗)
 btnImportWatchlist.addEventListener("click", (e) => {
-  e.preventDefault(); // 防止網頁跳轉
+  e.preventDefault();
   const userInput = prompt("請貼上您先前匯出的股票代號（請用逗點隔開）：");
-  
-  if (userInput === null) return; // 使用者按了取消
-  
+  if (userInput === null) return;
   const cleanedInput = userInput.trim();
   if (!cleanedInput) {
     alert("輸入內容為空，取消匯入。");
     return;
   }
-  
   watchlistInput.value = cleanedInput;
   localStorage.setItem("lohas_watchlist", cleanedInput);
-  watchlistResult.innerHTML = ""; // 乾淨清空舊畫面的結果卡片
+  watchlistResult.innerHTML = "";
   watchlistStatus.textContent = "📥 歷史清單匯入成功！點擊下方按鈕即可重新掃描。";
 });
 
-// --- 詳細單檔查詢按鈕 ---
+// --- 詳細單檔查詢按鈕功能 ---
 fetchSymbolBtn.addEventListener("click", async () => {
   fetchStatus.textContent = "讀取中...";
   let inputVal = symbolInput.value.trim().toUpperCase();
@@ -317,20 +332,24 @@ fetchSymbolBtn.addEventListener("click", async () => {
     const json = await res.json();
     csvInput.value = JSON.stringify(json.rows);
     
+    // 將大圖表標題賦值為後端智慧過濾整合回來的 "代碼+名稱" (例如 2330 台積電)
     if (chartTitle) {
       chartTitle.textContent = json.symbol;
     }
     
     render();
     fetchStatus.textContent = "成功";
+    
+    // 詳細單檔查詢也成功儲存，下次重新整理不用重新輸入
     localStorage.setItem("lohas_last_symbol", inputVal);
     localStorage.setItem("lohas_last_market", selectedMarket);
-  } catch (err) { 
+  } catch (err) {
     fetchStatus.textContent = "失敗"; 
     console.error("Fetch 錯誤資訊:", err);
   }
 });
 
+// 載入模擬範例數據
 document.querySelector("#sampleBtn").addEventListener("click", () => {
   const mock = []; let p = 100;
   for(let i=0; i<300; i++) mock.push({ date: new Date(Date.now() - (300-i)*86400000).toISOString(), close: p += (Math.random()-0.48) });
