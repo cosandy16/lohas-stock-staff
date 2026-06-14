@@ -42,7 +42,7 @@ const TW_STOCK_NAMES = {
   "5371":"中光電","5381":"合正","5388":"中磊","5398":"拓墣","5434":"崇越電",
   "5522":"遠雄","5533":"皇昌","5536":"聖暉","5538":"東明","5546":"永信建",
   "5608":"四維航","5871":"中租-KY","5876":"上海商銀","5880":"合庫金",
-  "6005":"群益證","6005":"福泰","6024":"群益期","6025":"星展(台灣)","6030":"第一金",
+  "6005":"群益證","6024":"群益期","6025":"星展(台灣)","6030":"第一金",
   "6104":"創惟","6112":"聚碩","6116":"彩晶","6121":"新普","6133":"金橋",
   "6153":"嘉聯益","6196":"帆宣","6197":"佳必琪","6201":"亞弘電","6202":"盛群",
   "6204":"艾訊","6208":"日揚","6215":"和椿","6216":"居易","6220":"岱稜",
@@ -63,7 +63,7 @@ const TW_STOCK_NAMES = {
   "6706":"惠特","6707":"安集","6711":"集盛","6712":"科誠","6714":"安格",
   "6715":"和泰興業","6719":"力旺","6720":"品安","6721":"馥鋼","6722":"ST-KY",
   "6723":"安碁","6724":"赤科","6726":"泰誠","6727":"群聯","6728":"磊晶",
-  "6730":"瑭冠","6732":"玄裕航太","6743":"安碁資訊","6744":"安格", "6770":"力積電",
+  "6730":"瑭冠","6732":"玄裕航太","6743":"安碁資訊","6770":"力積電",
   "8046":"南電","8048":"德勝","8049":"中保科","8050":"廣積","8052":"富崴",
   "8054":"安國","8056":"建榮","8059":"勁毅","8060":"華景電","8069":"元太",
   "8070":"長華","8072":"陞泰","8085":"福德","8086":"宏捷科","8088":"品安",
@@ -87,17 +87,18 @@ const TW_STOCK_NAMES = {
   "9944":"新麗","9945":"潤泰全","9946":"三發地產","9950":"萬國通路",
 };
 
-// 取得股票名稱（支援 2379.TW / 2379.TWO / 2379 格式）
+// 取得股票名稱（支援 2379.TW / 2379.TWO / 2379 格式，並強化前後空格與大小寫容錯）
 function getStockName(symbol) {
   if (!symbol) return "";
-  const code = symbol.replace(/\.(TW|TWO)$/i, "").toUpperCase();
+  // 移除前後空白、轉大寫、並將可能的市場後綴 .TW 或 .TWO 剃除
+  const code = symbol.trim().toUpperCase().replace(/\.(TW|TWO)$/i, "");
   return TW_STOCK_NAMES[code] || "";
 }
 
 // 格式化顯示：代號 + 名稱（如有）
 function formatSymbolDisplay(symbol) {
   const name = getStockName(symbol);
-  return name ? `${symbol}　${name}` : symbol;
+  return name ? `${symbol} ${name}` : symbol;
 }
 
 const csvInput = document.querySelector("#csvInput");
@@ -295,7 +296,7 @@ btnWatchlist.addEventListener("click", async () => {
   let currentIndex = 0;
   for (const s of syms) {
     currentIndex++;
-    // 💡 修正點：進度條文字優化，讓使用者在等待 15 支抓取時有心理預期
+    // 💡 修正點：進度條文字優化
     watchlistStatus.textContent = `🔍 正在掃描區間... (${currentIndex} / ${totalStocks})`;
 
     try {
@@ -322,6 +323,7 @@ btnWatchlist.addEventListener("click", async () => {
       const zoneColor = isSellSignal ? '#c94b4b' : (isBuySignal ? '#12614a' : '#2c6ebd');
       const smallTextColor = (isBuySignal || isSellSignal) ? '#333333' : '#666666';
 
+      // 💡 核心優化：將原本可能殘留後綴的 sym (如 2330.TW) 清洗後再扔進對照表獲取名稱
       const stockName = getStockName(sym);
       item.innerHTML = `
         <div>
@@ -375,7 +377,6 @@ btnExportWatchlist.addEventListener("click", (e) => {
     return;
   }
   
-  // 利用現代瀏覽器 API 將文字複製到剪貼簿
   navigator.clipboard.writeText(currentText).then(() => {
     watchlistStatus.textContent = "📋 清單已自動複製到剪貼簿！可貼至記事本備份。";
   }).catch(err => {
@@ -398,7 +399,7 @@ btnImportWatchlist.addEventListener("click", (e) => {
   
   watchlistInput.value = cleanedInput;
   localStorage.setItem("lohas_watchlist", cleanedInput);
-  watchlistResult.innerHTML = ""; // 乾淨清空舊畫面的結果卡片
+  watchlistResult.innerHTML = ""; 
   watchlistStatus.textContent = "📥 歷史清單匯入成功！點擊下方按鈕即可重新掃描。";
 });
 
