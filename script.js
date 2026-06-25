@@ -543,6 +543,7 @@ function updateWatchlistDisplay() {
 
     const card = document.createElement("div");
     card.className = "watchlist-item";
+    card.style.cursor = "pointer"; // 💡 讓滑鼠懸停時顯示手勢，提示使用者可以點擊
 
     if (isBuySignal) {
       card.style.backgroundColor = "#e8f5e9";
@@ -559,7 +560,7 @@ function updateWatchlistDisplay() {
     const zoneColor = isSellSignal ? '#c94b4b' : (isBuySignal ? '#12614a' : '#2c6ebd');
     const smallTextColor = (isBuySignal || isSellSignal) ? '#333333' : '#666666';
 
-    // 💡 智慧整合：小卡片清單中直接呈現 PE 與 殖利率
+    // 智慧整合：小卡片清單中直接呈現 PE 與 殖利率
     const fun = getFundamentals(item.sym, item.last.close);
     const peDisp = fun.eps > 0 ? `${(item.last.close / fun.eps).toFixed(1)}x` : "N/A";
     const yieldDisp = `${((fun.dividend / item.last.close) * 100).toFixed(1)}%`;
@@ -575,6 +576,28 @@ function updateWatchlistDisplay() {
         <small style="color:${smallTextColor}">區間: ${getPriceRangeDesc(item.last)}</small>
       </div>
     `;
+
+    card.addEventListener("click", () => {
+      let rawSym = item.sym.toUpperCase();
+      let mktVal = "us"; // 預設美股
+      
+      // 自動解析後綴，還原為輸入欄位的設定
+      if (rawSym.includes(".TWO")) {
+        mktVal = "two";
+        rawSym = rawSym.replace(".TWO", "");
+      } else if (rawSym.includes(".TW")) {
+        mktVal = "tw";
+        rawSym = rawSym.replace(".TW", "");
+      }
+      
+      // 填入輸入欄位與下拉選單
+      symbolInput.value = rawSym;
+      market.value = mktVal;
+      
+      // 模擬點擊「讀取並繪製五線譜」按鈕
+      fetchSymbolBtn.click();
+    });
+
     watchlistResult.appendChild(card);
   });
 }
