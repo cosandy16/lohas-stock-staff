@@ -1,18 +1,30 @@
-// --- 基礎資料設定 (請確保這裡有設定 lowPe) ---
+// --- 基礎設定與資料庫 ---
 const STOCK_FUNDAMENTALS = {
   "1477": { eps: 15.0, lowPe: 12 }, 
   "1476": { eps: 22.0, lowPe: 15 },
   "2330": { eps: 38.2, lowPe: 14 },
-  "2317": { eps: 10.2, lowPe: 9 }
+  "2317": { eps: 10.2, lowPe: 9 },
+  "2412": { eps: 5.5,  lowPe: 20 }
 };
 
+const levelDefs = [
+  { key: 'plus2', color: '#e57373' },
+  { key: 'plus1', color: '#ffb74d' },
+  { key: 'mid', color: '#64b5f6' },
+  { key: 'minus1', color: '#81c784' },
+  { key: 'minus2', color: '#4db6ac' }
+];
+
+// --- 取得基本面資料 ---
 function getFundamentals(symbol) {
   const code = symbol.replace(/\.(TW|TWO)$/i, "").toUpperCase();
   return STOCK_FUNDAMENTALS[code] || { eps: 0, lowPe: 0 };
 }
 
-// --- 繪圖函式 (內含 PE 防禦線邏輯) ---
+// --- 核心繪圖函式 ---
 function renderChart(analysis) {
+  const chart = document.getElementById('chart');
+  const symbolInput = document.getElementById('symbolInput');
   const width = 1000, height = 500;
   const margin = { top: 40, right: 120, bottom: 40, left: 60 };
   const last = analysis[analysis.length - 1];
@@ -23,12 +35,12 @@ function renderChart(analysis) {
   const x = (i) => margin.left + (i / (analysis.length - 1)) * (width - margin.left - margin.right);
   const y = (val) => height - margin.bottom - ((val - minP) / (maxP - minP)) * (height - margin.top - margin.bottom);
 
-  // 計算 PE 防禦價
+  // 1. 計算 PE 防禦價位 (例如聚陽 15 * 12 = 180)
   const sym = symbolInput.value.trim().toUpperCase();
   const fun = getFundamentals(sym);
   const pePrice = fun.eps * fun.lowPe;
   
-  // 生成 SVG
+  // 2. 生成紅色防禦虛線的 SVG 字串
   let peLineHtml = "";
   if (fun.eps > 0 && fun.lowPe > 0 && pePrice > minP && pePrice < maxP) {
     const py = y(pePrice);
@@ -41,6 +53,7 @@ function renderChart(analysis) {
     `;
   }
 
+  // 3. 組合完整的 SVG 繪圖
   chart.innerHTML = `
     <svg viewBox="0 0 ${width} ${height}" style="background:#fff; width:100%; height:100%;">
       ${peLineHtml}
@@ -49,4 +62,3 @@ function renderChart(analysis) {
     </svg>
   `;
 }
-// (後續保持其他原有功能函式即可)
