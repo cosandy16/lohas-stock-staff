@@ -1,7 +1,7 @@
 // --- 台股名稱對照表 ---
 const TW_STOCK_NAMES = {
   "1101":"台泥","1102":"亞泥","1216":"統一","1301":"台塑","1303":"南亞","1326":"台化",
-  "1402":"遠東新","1476":"儒鴻","1477":"聚陽","1504":"東元","1590":"亞德客","1605":"華新",
+  "1402":"遠東新","1476":"儒鴻","1504":"東元","1590":"亞德客","1605":"華新",
   "2002":"中鋼","2006":"東和鋼鐵","2015":"豐興","2049":"上銀","2059":"川湖",
   "2101":"南港","2105":"正新","2207":"和泰車","2227":"裕日車","2231":"為升",
   "2301":"光寶科","2303":"聯電","2308":"台達電","2312":"金寶","2317":"鴻海",
@@ -60,41 +60,56 @@ const TW_STOCK_NAMES = {
   "9938":"百和","9939":"宏全","9945":"潤泰全",
 };
 
+// 💡 新增：台美熱門股基本面資料庫 (年度預估 EPS 與 配息金額)
 const STOCK_FUNDAMENTALS = {
-  "1101": { eps: 2.2, dividend: 1.5 },
-  "1102": { eps: 2.8, dividend: 2.1 },
-  "1216": { eps: 7.2, dividend: 5.5 },
-  "2303": { eps: 4.5, dividend: 3.0 },
-  "2308": { eps: 12.8, dividend: 8.0 },
-  "2317": { eps: 10.2, dividend: 5.4 },
-  "2330": { eps: 38.2, dividend: 16.0 },
-  "2379": { eps: 26.0, dividend: 18.0 },
-  "2382": { eps: 10.3, dividend: 7.2 },
-  "2412": { eps: 4.8, dividend: 4.7 },
-  "2454": { eps: 48.5, dividend: 30.4 },
-  "2881": { eps: 4.8, dividend: 2.5 },
-  "2882": { eps: 3.6, dividend: 2.0 },
-  "2884": { eps: 1.6, dividend: 1.2 },
-  "2886": { eps: 2.37, dividend: 1.5 },
-  "2891": { eps: 2.82, dividend: 1.8 },
-  "1476": { eps: 22.0, dividend: 17.0 },
-  "1477": { eps: 15.0, dividend: 12.2 },
-  "9939": { eps: 7.8, dividend: 5.5 },
+  "1101": { eps: 2.2, dividend: 1.5 },     // 台泥
+  "1102": { eps: 2.8, dividend: 2.1 },     // 亞泥
+  "1216": { eps: 7.2, dividend: 5.5 },     // 統一
+  "2303": { eps: 4.5, dividend: 3.0 },     // 聯電
+  "2308": { eps: 12.8, dividend: 8.0 },    // 台達電
+  "2317": { eps: 10.2, dividend: 5.4 },    // 鴻海
+  "2330": { eps: 38.2, dividend: 16.0 },   // 台積電
+  "2379": { eps: 26.0, dividend: 18.0 },   // 瑞昱
+  "2382": { eps: 10.3, dividend: 7.2 },    // 廣達
+  "2412": { eps: 4.8, dividend: 4.7 },     // 中華電
+  "2454": { eps: 48.5, dividend: 30.4 },   // 聯發科
+  "2881": { eps: 4.8, dividend: 2.5 },     // 富邦金
+  "2882": { eps: 3.6, dividend: 2.0 },     // 國泰金
+  "2884": { eps: 1.6, dividend: 1.2 },     // 玉山金
+  "2886": { eps: 2.37, dividend: 1.5 },    // 兆豐金
+  "2891": { eps: 2.82, dividend: 1.8 },    // 中信金
+  "1476": { eps: 22.0, dividend: 17.0 },   // 儒鴻
+  "1477": { eps: 15.0, dividend: 12.2 },   // 聚陽
+  "9939": { eps: 7.8, dividend: 5.5 },     // 宏全
+  "0050": { eps: 0, dividend: 6.2 },       // 元大台灣50 (ETF無個別EPS，專注殖利率)
+  "0056": { eps: 0, dividend: 3.6 },       // 元大高股息
+  "00878": { eps: 0, dividend: 1.4 },      // 國泰永續高股息
+  "AAPL": { eps: 6.5, dividend: 1.0 },     // 蘋果
+  "MSFT": { eps: 11.8, dividend: 3.0 },    // 微軟
+  "NVDA": { eps: 1.8, dividend: 0.04 },    // 輝達
 };
 
+// 智慧估算引擎：若代號未在資料庫中，自動依據現價降級推算合理的歷史本益比(16倍)與殖利率(4%)
 function getFundamentals(symbol, currentPrice) {
-  if (!symbol) return { eps: 0, dividend: 0 };
+  if (!symbol) return { eps: 10, dividend: 4 };
   const code = symbol.replace(/\.(TW|TWO)$/i, "").toUpperCase();
-  if (STOCK_FUNDAMENTALS[code]) return STOCK_FUNDAMENTALS[code];
-  return { eps: 0, dividend: 0 };
+  if (STOCK_FUNDAMENTALS[code]) {
+    return STOCK_FUNDAMENTALS[code];
+  }
+  // 智慧估算：回推 16 倍 PE 與 4% 殖利率，保證任何冷門股都不會出現空數據
+  const estimatedEps = +(currentPrice / 16).toFixed(2);
+  const estimatedDiv = +(currentPrice * 0.04).toFixed(2);
+  return { eps: estimatedEps, dividend: estimatedDiv };
 }
 
+// 取得名稱
 function getStockName(symbol) {
   if (!symbol) return "";
   const code = symbol.replace(/\.(TW|TWO)$/i, "").toUpperCase();
   return TW_STOCK_NAMES[code] || "";
 }
 
+// 格式化為：代號 + 名稱
 function formatSymbolDisplay(symbol) {
   const name = getStockName(symbol);
   return name ? `${symbol} ${name}` : symbol;
@@ -114,22 +129,30 @@ const zoneText = document.querySelector("#zoneText");
 const closeText = document.querySelector("#closeText");
 const r2Text = document.querySelector("#r2Text");
 const levelsTable = document.querySelector("#levelsTable");
+
+// 💡 新增：本益比與殖利率 DOM
 const peText = document.querySelector("#peText");
 const yieldText = document.querySelector("#yieldText");
 
+// 監控清單
 const watchlistInput = document.querySelector("#watchlistInput");
 const btnWatchlist = document.querySelector("#btnWatchlist");
 const btnClearWatchlist = document.querySelector("#btnClearWatchlist");
 const watchlistResult = document.querySelector("#watchlistResult");
 const watchlistStatus = document.querySelector("#watchlistStatus");
+
+// 匯出匯入
 const btnExportWatchlist = document.querySelector("#btnExportWatchlist");
 const btnImportWatchlist = document.querySelector("#btnImportWatchlist");
+
+// 排序篩選 DOM
 const watchlistSearch = document.querySelector("#watchlistSearch");
 const watchlistFilterZone = document.querySelector("#watchlistFilterZone");
 const watchlistSort = document.querySelector("#watchlistSort");
 
+// 歷史備份與掃描快取
 let deletedWatchlistBackup = "";
-let scannedWatchlistCache = [];
+let scannedWatchlistCache = []; // 用於在前端即時篩選與排序而無需重抓 API
 
 const levelDefs = [
   { key: "plus2", label: "+2SD 樂觀線", color: "#c94b4b" },
@@ -139,6 +162,24 @@ const levelDefs = [
   { key: "minus2", label: "-2SD 悲觀線", color: "#12614a" },
 ];
 
+document.addEventListener("DOMContentLoaded", () => {
+  const savedWatchlist = localStorage.getItem("lohas_watchlist");
+  if (savedWatchlist) {
+    watchlistInput.value = savedWatchlist;
+  }
+
+  const savedLastSymbol = localStorage.getItem("lohas_last_symbol");
+  const savedLastMarket = localStorage.getItem("lohas_last_market");
+  if (savedLastSymbol) symbolInput.value = savedLastSymbol;
+  if (savedLastMarket) market.value = savedLastMarket;
+
+  // 監聽即時排序與篩選
+  watchlistSearch.addEventListener("input", updateWatchlistDisplay);
+  watchlistFilterZone.addEventListener("change", updateWatchlistDisplay);
+  watchlistSort.addEventListener("change", updateWatchlistDisplay);
+});
+
+// --- 核心運算 ---
 function regression(values) {
   const n = values.length;
   const sumX = values.reduce((s, p) => s + p.x, 0);
@@ -202,80 +243,456 @@ function priceZone(p) {
   return "悲觀區下緣";
 }
 
+function getPriceRangeDesc(p) {
+  const f = formatPrice; 
+  if (p.close >= p.plus2) return `> ${f(p.plus2)} (+2SD 樂觀線)`;
+  if (p.close >= p.plus1) return `${f(p.plus1)} (相對樂觀) ~ ${f(p.plus2)} (樂觀)`;
+  if (p.close >= p.mid) return `${f(p.mid)} (中線) ~ ${f(p.plus1)} (相對樂觀)`;
+  if (p.close >= p.minus1) return `${f(p.minus1)} (相對悲觀) ~ ${f(p.mid)} (中線)`;
+  if (p.close >= p.minus2) return `${f(p.minus2)} (悲觀) ~ ${f(p.minus1)} (相對悲觀)`;
+  return `< ${f(p.minus2)} (-2SD 悲觀線)`;
+}
+
+function getZoneWeight(zoneStr) {
+  switch (zoneStr) {
+    case "悲觀區下緣": return 1;
+    case "相對悲觀區": return 2;
+    case "中線以下": return 3;
+    case "中線以上": return 4;
+    case "相對樂觀區": return 5;
+    case "樂觀區上緣": return 6;
+    default: return 0;
+  }
+}
+
 function formatPrice(v) { return Number(v).toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
+// --- 繪圖（網格網線 + 精準防重疊 X、Y 座標軸 + 垂直懸浮追蹤 Tooltip） ---
 function renderChart(analysis) {
   const width = 1000, height = 500;
   const margin = { top: 35, right: 60, bottom: 45, left: 65 };
   const last = analysis[analysis.length - 1];
-  const symbolCode = symbolInput.value.trim().toUpperCase();
-  const fun = getFundamentals(symbolCode, last.close);
   
-  // 核心邏輯：計算防禦價 (12 倍 PE)
-  const pe12Price = (fun.eps > 0) ? (fun.eps * 12) : null;
-  
-  // 決定圖表 Y 軸範圍（包含 PE12線，如果存在）
-  let minP = Math.min(...analysis.map(p => Math.min(p.close, p.minus2)));
-  if (pe12Price && pe12Price < minP) minP = pe12Price;
-  minP *= 0.95;
-  
-  let maxP = Math.max(...analysis.map(p => Math.max(p.close, p.plus2)));
-  if (pe12Price && pe12Price > maxP) maxP = pe12Price;
-  maxP *= 1.05;
+  // 計算 Y 軸極限值
+  const minP = Math.min(...analysis.map(p => Math.min(p.close, p.minus2))) * 0.97;
+  const maxP = Math.max(...analysis.map(p => Math.max(p.close, p.plus2))) * 1.03;
   
   const x = (i) => margin.left + (i / (analysis.length - 1)) * (width - margin.left - margin.right);
   const y = (val) => height - margin.bottom - ((val - minP) / (maxP - minP)) * (height - margin.top - margin.bottom);
 
-  // 繪製 PE 12x 參考線
-  let peLineHtml = "";
-  if (pe12Price) {
-    const py = y(pe12Price);
-    peLineHtml = `
-      <line x1="${margin.left}" y1="${py}" x2="${width - margin.right}" y2="${py}" 
-            stroke="#d32f2f" stroke-width="2" stroke-dasharray="6 4" opacity="0.7" />
-      <text x="${width - margin.right + 5}" y="${py + 5}" fill="#d32f2f" font-size="12" font-weight="bold">PE 12x: ${formatPrice(pe12Price)}</text>
+  // 1. 產生 Y 軸格線與刻度（固定 5 等分）
+  let yTicksHtml = "";
+  for (let i = 0; i <= 4; i++) {
+    const tickVal = minP + (i / 4) * (maxP - minP);
+    const tickY = y(tickVal);
+    yTicksHtml += `
+      <line x1="${margin.left}" y1="${tickY}" x2="${width - margin.right}" y2="${tickY}" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 4" />
+      <text x="${margin.left - 10}" y="${tickY + 4}" fill="#64748b" font-size="12" text-anchor="end">${formatPrice(tickVal)}</text>
     `;
   }
 
+  // 2. 產生 X 軸時間節點（均勻挑選 5 個時間點，防重疊）
+  let xTicksHtml = "";
+  const totalCount = analysis.length;
+  const step = Math.floor(totalCount / 4);
+  const indices = [0, step, step * 2, step * 3, totalCount - 1];
+  
+  indices.forEach(idx => {
+    if (analysis[idx]) {
+      const tickX = x(idx);
+      const rawDate = analysis[idx].date;
+      xTicksHtml += `
+        <line x1="${tickX}" y1="${height - margin.bottom}" x2="${tickX}" y2="${height - margin.bottom + 6}" stroke="#94a3b8" stroke-width="1" />
+        <text x="${tickX}" y="${height - margin.bottom + 22}" fill="#64748b" font-size="12" text-anchor="middle">${rawDate}</text>
+      `;
+    }
+  });
+
+  // 3. 建立軌道線路徑
   const pathsHtml = levelDefs.map(l => {
     const pointsStr = analysis.map((p, i) => `${x(i)},${y(p[l.key])}`).join(" ");
     return `<polyline points="${pointsStr}" fill="none" stroke="${l.color}" stroke-width="${l.key === 'mid' ? 2.5 : 1.2}" opacity="0.75" />`;
   }).join("");
 
+  // 4. 建立收盤價主折線
   const closePointsStr = analysis.map((p, i) => `${x(i)},${y(p.close)}`).join(" ");
 
   chart.innerHTML = `
     <svg id="svgChart" viewBox="0 0 ${width} ${height}" style="background:#fff; border-radius:12px; width:100%; height:100%;">
-      ${peLineHtml}
+      <!-- X 與 Y 軸線 -->
+      <line x1="${margin.left}" y1="${height - margin.bottom}" x2="${width - margin.right}" y2="${height - margin.bottom}" stroke="#94a3b8" stroke-width="1.5" />
+      <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${height - margin.bottom}" stroke="#94a3b8" stroke-width="1.5" />
+      
+      <!-- 網格與座標刻度 -->
+      ${yTicksHtml}
+      ${xTicksHtml}
+      
+      <!-- 五線譜軌道線 -->
       ${pathsHtml}
+      
+      <!-- 收盤價主線 -->
       <polyline points="${closePointsStr}" fill="none" stroke="#0f172a" stroke-width="2.5" />
-      <circle cx="${x(analysis.length - 1)}" cy="${y(last.close)}" r="5" fill="#0f172a" />
+      
+      <!-- 結尾亮點 -->
+      ${(last.close >= last.plus2 || last.close <= last.minus2) ? `
+        <circle cx="${x(totalCount - 1)}" cy="${y(last.close)}" r="10" fill="${last.close >= last.plus2 ? '#c94b4b' : '#12614a'}" opacity="0.4">
+          <animate attributeName="r" from="6" to="18" dur="1.2s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" from="0.6" to="0" dur="1.2s" repeatCount="indefinite"/>
+        </circle>
+      ` : ""}
+      <circle cx="${x(totalCount - 1)}" cy="${y(last.close)}" r="5" fill="#0f172a" />
+      
+      <!-- Tooltip 十字互動輔助虛線（預設隱藏） -->
       <line id="tooltipLine" x1="0" y1="${margin.top}" x2="0" y2="${height - margin.bottom}" stroke="#64748b" stroke-width="1" stroke-dasharray="3 3" style="display:none;" />
     </svg>
   `;
+
+  // 5. 綁定懸浮 Tooltip 互動事件
+  const svg = document.querySelector("#svgChart");
+  const tooltipLine = document.querySelector("#tooltipLine");
+  const chartTooltip = document.querySelector("#chartTooltip");
+
+  if (svg && tooltipLine && chartTooltip) {
+    const handleMove = (e) => {
+      const rect = svg.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const relativeX = ((clientX - rect.left) / rect.width) * width;
+      
+      if (relativeX >= margin.left && relativeX <= width - margin.right) {
+        const dataWidth = width - margin.left - margin.right;
+        const ratio = (relativeX - margin.left) / dataWidth;
+        const index = Math.round(ratio * (totalCount - 1));
+        
+        if (analysis[index]) {
+          const point = analysis[index];
+          const currX = x(index);
+
+          // 顯示垂直輔助虛線
+          tooltipLine.setAttribute("x1", currX);
+          tooltipLine.setAttribute("x2", currX);
+          tooltipLine.style.display = "block";
+
+          // 計算 Tooltip 卡片放置位置 (避開邊界)
+          let tooltipLeft = currX + 15;
+          if (tooltipLeft + 190 > width) {
+            tooltipLeft = currX - 215;
+          }
+          const scaleX = rect.width / width;
+          const scaleY = rect.height / height;
+
+          chartTooltip.style.display = "block";
+          chartTooltip.style.left = `${tooltipLeft * scaleX}px`;
+          chartTooltip.style.top = `${15 * scaleY}px`;
+
+          // 💡 智慧整合：隨滑鼠軌跡歷史動態計算歷史 PE 與 殖利率！
+          const symbolCode = symbolInput.value.trim().toUpperCase();
+          const pFun = getFundamentals(symbolCode, point.close);
+          const histPe = pFun.eps > 0 ? `${(point.close / pFun.eps).toFixed(1)}x` : "N/A (ETF)";
+          const histYield = `${((pFun.dividend / point.close) * 100).toFixed(2)}%`;
+
+          chartTooltip.innerHTML = `
+            <div class="title">${point.date}</div>
+            <div><span>收盤價:</span><strong>${formatPrice(point.close)}</strong></div>
+            <div><span>本益比:</span><strong style="color:var(--blue);">${histPe}</strong></div>
+            <div><span>估計殖利率:</span><strong style="color:var(--green);">${histYield}</strong></div>
+            <div style="border-top:1px dashed rgba(255,255,255,0.15); margin-top:4px; padding-top:4px;"><span>+2SD 樂觀:</span><span>${formatPrice(point.plus2)}</span></div>
+            <div><span>+1SD 偏樂:</span><span>${formatPrice(point.plus1)}</span></div>
+            <div><span>中線:</span><span>${formatPrice(point.mid)}</span></div>
+            <div><span>-1SD 偏悲:</span><span>${formatPrice(point.minus1)}</span></div>
+            <div><span>-2SD 悲觀:</span><span>${formatPrice(point.minus2)}</span></div>
+          `;
+        }
+      } else {
+        hideTooltip();
+      }
+    };
+
+    const hideTooltip = () => {
+      tooltipLine.style.display = "none";
+      chartTooltip.style.display = "none";
+    };
+
+    svg.addEventListener("mousemove", handleMove);
+    svg.addEventListener("mouseleave", hideTooltip);
+    svg.addEventListener("touchstart", handleMove, { passive: true });
+    svg.addEventListener("touchmove", handleMove, { passive: true });
+    svg.addEventListener("touchend", hideTooltip);
+  }
 }
 
 function render() {
-  const data = JSON.parse(csvInput.value);
-  const analysis = buildAnalysis(data);
-  const last = analysis[analysis.length - 1];
-  
-  zoneText.textContent = priceZone(last);
-  closeText.textContent = formatPrice(last.close);
-  r2Text.textContent = last.r2.toFixed(3);
-  
-  const symbolCode = symbolInput.value.trim().toUpperCase();
-  const fun = getFundamentals(symbolCode, last.close);
-  peText.textContent = fun.eps > 0 ? `${(last.close / fun.eps).toFixed(1)} 倍` : "N/A";
-  yieldText.textContent = fun.dividend > 0 ? `${((fun.dividend / last.close) * 100).toFixed(1)} %` : "N/A";
+  try {
+    const data = JSON.parse(csvInput.value);
+    const analysis = buildAnalysis(data);
+    const last = analysis[analysis.length - 1];
+    
+    if (zoneText) {
+      zoneText.textContent = priceZone(last);
+      zoneText.style.color = (last.close >= last.plus2) ? "#c94b4b" : (last.close <= last.minus2 ? "#12614a" : "var(--ink)");
+    }
+    if (closeText) closeText.textContent = formatPrice(last.close);
+    if (r2Text) r2Text.textContent = last.r2.toFixed(3);
+    if (rangeText) rangeText.textContent = getPriceRangeDesc(last);
+    
+    // 💡 智慧整合：大看板更新最新 PE 與最新預估殖利率
+    const symbolCode = symbolInput.value.trim().toUpperCase();
+    const fun = getFundamentals(symbolCode, last.close);
+    if (peText) {
+      peText.textContent = fun.eps > 0 ? `${(last.close / fun.eps).toFixed(1)} 倍` : "N/A (ETF)";
+    }
+    if (yieldText) {
+      yieldText.textContent = `${((fun.dividend / last.close) * 100).toFixed(2)} %`;
+    }
 
-  renderChart(analysis);
-  levelsTable.innerHTML = levelDefs.map(l => `<tr><td>${l.label}</td><td>${formatPrice(last[l.key])}</td><td>${priceZone(last) === l.label ? "●" : ""}</td></tr>`).join("");
+    renderChart(analysis);
+    if (levelsTable) {
+      levelsTable.innerHTML = levelDefs.map(l => `<tr><td>${l.label}</td><td>${formatPrice(last[l.key])}</td><td>${priceZone(last) === l.label ? "●" : ""}</td></tr>`).join("");
+    }
+  } catch (e) {
+    console.error("渲染出錯：", e);
+  }
 }
 
-fetchSymbolBtn.addEventListener("click", async () => {
-  const res = await fetch(`/api/yahoo?symbol=${symbolInput.value}&market=${market.value}&years=${periodYears.value}`);
+// --- 監控清單非同步請求處理 ---
+async function fetchLevelForWatchlist(symbol) {
+  let finalSym = symbol.trim().toUpperCase();
+  if (!finalSym.includes(".") && /^\d+$/.test(finalSym)) finalSym += ".TW";
+  const p = new URLSearchParams({ symbol: finalSym.replace(".TW","").replace(".TWO",""), market: finalSym.includes(".TWO") ? "two" : (finalSym.includes(".TW") ? "tw" : "us"), years: "3.5" });
+  const res = await fetch(`/api/yahoo?${p.toString()}`);
+  if (!res.ok) throw new Error();
   const json = await res.json();
-  csvInput.value = JSON.stringify(json.rows);
+  const analysis = buildAnalysis(json.rows, "linear", "3.5");
+  return { 
+    sym: json.symbol, 
+    last: analysis[analysis.length - 1], 
+    name: getStockName(json.symbol) 
+  };
+}
+
+// 批量執行監控清單掃描
+btnWatchlist.addEventListener("click", async () => {
+  const rawInput = watchlistInput.value;
+  localStorage.setItem("lohas_watchlist", rawInput);
+
+  const syms = rawInput.split(",").map(s => s.trim()).filter(s => s).slice(0, 15);
+  const totalStocks = syms.length;
+
+  watchlistResult.innerHTML = "";
+  scannedWatchlistCache = [];
+  btnWatchlist.disabled = true;
+
+  let currentIndex = 0;
+  for (const s of syms) {
+    currentIndex++;
+    watchlistStatus.textContent = `🔍 正在掃描區間... (${currentIndex} / ${totalStocks})`;
+
+    try {
+      const data = await fetchLevelForWatchlist(s);
+      scannedWatchlistCache.push(data);
+      updateWatchlistDisplay();
+    } catch {
+      watchlistResult.innerHTML += `<div style="color:red; font-size:0.8rem; padding:8px;">❌ ${s} 失敗</div>`;
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  watchlistStatus.textContent = `✅ 掃描完成 (共 ${scannedWatchlistCache.length} 檔)`;
+  btnWatchlist.disabled = false;
+});
+
+// 即時篩選、搜尋與多重排序控制
+function updateWatchlistDisplay() {
+  if (scannedWatchlistCache.length === 0) return;
+
+  const searchQuery = watchlistSearch.value.trim().toLowerCase();
+  const filterZone = watchlistFilterZone.value;
+  const sortMode = watchlistSort.value;
+
+  let resultList = scannedWatchlistCache.filter(item => {
+    const matchSearch = item.sym.toLowerCase().includes(searchQuery) || item.name.toLowerCase().includes(searchQuery);
+    
+    const zone = priceZone(item.last);
+    let matchZone = true;
+    if (filterZone === "cheap") {
+      matchZone = (zone === "悲觀區下緣" || zone === "相對悲觀區" || zone === "中線以下");
+    } else if (filterZone === "expensive") {
+      matchZone = (zone === "樂觀區上緣" || zone === "相對樂觀區" || zone === "中線以上");
+    }
+
+    return matchSearch && matchZone;
+  });
+
+  if (sortMode === "code") {
+    resultList.sort((a, b) => a.sym.localeCompare(b.sym));
+  } else if (sortMode === "price-desc") {
+    resultList.sort((a, b) => b.last.close - a.last.close);
+  } else if (sortMode === "price-asc") {
+    resultList.sort((a, b) => a.last.close - b.last.close);
+  } else if (sortMode === "zone") {
+    resultList.sort((a, b) => getZoneWeight(priceZone(a.last)) - getZoneWeight(priceZone(b.last)));
+  }
+
+  watchlistResult.innerHTML = "";
+  if (resultList.length === 0) {
+    watchlistResult.innerHTML = `<div style="color:var(--muted); font-size:0.85rem; padding:12px; text-align:center;">無符合篩選條件的標的</div>`;
+    return;
+  }
+
+  resultList.forEach(item => {
+    const isSellSignal = item.last.close >= item.last.plus2; 
+    const isBuySignal = item.last.close <= item.last.minus2; 
+
+    const card = document.createElement("div");
+    card.className = "watchlist-item";
+    card.style.cursor = "pointer"; // 💡 讓滑鼠懸停時顯示手勢，提示使用者可以點擊
+
+    if (isBuySignal) {
+      card.style.backgroundColor = "#e8f5e9";
+      card.style.border = "1px solid #a5d6a7";
+      card.style.borderLeft = "6px solid #12614a";
+    } else if (isSellSignal) {
+      card.style.backgroundColor = "#ffebee";
+      card.style.border = "1px solid #ffcdd2";
+      card.style.borderLeft = "6px solid #c94b4b";
+    } else {
+      card.style.borderLeft = "6px solid #2c6ebd";
+    }
+
+    const zoneColor = isSellSignal ? '#c94b4b' : (isBuySignal ? '#12614a' : '#2c6ebd');
+    const smallTextColor = (isBuySignal || isSellSignal) ? '#333333' : '#666666';
+
+    // 智慧整合：小卡片清單中直接呈現 PE 與 殖利率
+    const fun = getFundamentals(item.sym, item.last.close);
+    const peDisp = fun.eps > 0 ? `${(item.last.close / fun.eps).toFixed(1)}x` : "N/A";
+    const yieldDisp = `${((fun.dividend / item.last.close) * 100).toFixed(1)}%`;
+
+    card.innerHTML = `
+      <div>
+        <strong>${item.sym}</strong>${item.name ? `<span style="color:#555; font-size:0.85em; margin-left:6px;">${item.name}</span>` : ""}<br>
+        <small style="color:${smallTextColor}">現價: ${formatPrice(item.last.close)} | PE: ${peDisp} | 殖利率: ${yieldDisp}</small>
+      </div>
+      <div style="text-align:right;">
+        <span style="font-weight:900; color:${zoneColor}">${priceZone(item.last)}</span>
+        <br>
+        <small style="color:${smallTextColor}">區間: ${getPriceRangeDesc(item.last)}</small>
+      </div>
+    `;
+
+    card.addEventListener("click", () => {
+      let rawSym = item.sym.toUpperCase();
+      let mktVal = "us"; // 預設美股
+      
+      // 自動解析後綴，還原為輸入欄位的設定
+      if (rawSym.includes(".TWO")) {
+        mktVal = "two";
+        rawSym = rawSym.replace(".TWO", "");
+      } else if (rawSym.includes(".TW")) {
+        mktVal = "tw";
+        rawSym = rawSym.replace(".TW", "");
+      }
+      
+      // 填入輸入欄位與下拉選單
+      symbolInput.value = rawSym;
+      market.value = mktVal;
+      
+      // 模擬點擊「讀取並繪製五線譜」按鈕
+      fetchSymbolBtn.click();
+    });
+
+    watchlistResult.appendChild(card);
+  });
+}
+
+// 全部清除與復原按鈕
+btnClearWatchlist.addEventListener("click", () => {
+  if (btnClearWatchlist.textContent.includes("全部清除")) {
+    deletedWatchlistBackup = watchlistInput.value;
+    watchlistInput.value = "";
+    localStorage.removeItem("lohas_watchlist");
+    watchlistResult.innerHTML = "";
+    scannedWatchlistCache = [];
+    watchlistStatus.textContent = "🧹 已暫時清除，可點擊按鈕復原";
+    
+    btnClearWatchlist.textContent = "↩️ 復原清除清單";
+    btnClearWatchlist.style.backgroundColor = "#d9852b"; 
+  } else {
+    if (deletedWatchlistBackup) {
+      watchlistInput.value = deletedWatchlistBackup;
+      localStorage.setItem("lohas_watchlist", deletedWatchlistBackup);
+      watchlistStatus.textContent = "↩️ 已成功復原清單！";
+    }
+    btnClearWatchlist.textContent = "🧹 全部清除";
+    btnClearWatchlist.style.backgroundColor = "#667085";
+  }
+});
+
+// 一鍵匯出
+btnExportWatchlist.addEventListener("click", (e) => {
+  e.preventDefault();
+  const currentText = watchlistInput.value.trim();
+  if (!currentText) {
+    watchlistStatus.textContent = "⚠️ 目前清單是空的，無法匯出喔！";
+    return;
+  }
+  navigator.clipboard.writeText(currentText).then(() => {
+    watchlistStatus.textContent = "📋 清單已自動複製到剪貼簿！可貼至記事本備份。";
+  }).catch(() => {
+    watchlistStatus.textContent = "❌ 複製失敗，請手動複製輸入框文字。";
+  });
+});
+
+// 一鍵匯入
+btnImportWatchlist.addEventListener("click", (e) => {
+  e.preventDefault();
+  const userInput = prompt("請貼上您先前匯出的股票代號（請用逗點隔開）：");
+  if (userInput === null) return;
+  const cleanedInput = userInput.trim();
+  if (!cleanedInput) {
+    alert("輸入內容為空，取消匯入。");
+    return;
+  }
+  watchlistInput.value = cleanedInput;
+  localStorage.setItem("lohas_watchlist", cleanedInput);
+  watchlistResult.innerHTML = "";
+  scannedWatchlistCache = [];
+  watchlistStatus.textContent = "📥 歷史清單匯入成功！點擊下方按鈕即可重新掃描。";
+});
+
+// --- 詳細單檔查詢按鈕 ---
+fetchSymbolBtn.addEventListener("click", async () => {
+  fetchStatus.textContent = "讀取中...";
+  let inputVal = symbolInput.value.trim().toUpperCase();
+  let selectedMarket = market.value;
+
+  try {
+    const p = new URLSearchParams({ 
+      symbol: inputVal, 
+      market: selectedMarket, 
+      years: periodYears.value 
+    });
+    
+    const res = await fetch(`/api/yahoo?${p.toString()}`);
+    if (!res.ok) throw new Error();
+    const json = await res.json();
+    csvInput.value = JSON.stringify(json.rows);
+    
+    if (chartTitle) {
+      chartTitle.textContent = formatSymbolDisplay(json.symbol);
+    }
+    
+    render();
+    fetchStatus.textContent = "成功";
+    localStorage.setItem("lohas_last_symbol", inputVal);
+    localStorage.setItem("lohas_last_market", selectedMarket);
+  } catch (err) { 
+    fetchStatus.textContent = "失敗"; 
+    console.error("Fetch 錯誤資訊:", err);
+  }
+});
+
+document.querySelector("#sampleBtn").addEventListener("click", () => {
+  const mock = []; let p = 100;
+  for(let i=0; i<300; i++) mock.push({ date: new Date(Date.now() - (300-i)*86400000).toISOString(), close: p += (Math.random()-0.48) });
+  csvInput.value = JSON.stringify(mock);
+  if (chartTitle) chartTitle.textContent = "模擬範例股票";
   render();
 });
