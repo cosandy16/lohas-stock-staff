@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>股市樂活五線譜產生器</title>
     <link rel="stylesheet" href="styles.css" />
     <style>
@@ -14,9 +14,12 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        transition: transform 0.2s;
+        transition: transform 0.2s, box-shadow 0.2s;
       }
-      .watchlist-item:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+      .watchlist-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      }
       
       .watchlist-actions {
         display: grid;
@@ -30,7 +33,7 @@
         background-color: #475467;
       }
 
-      /* 💡 新增：防止 15 檔股票卡片把控制面板撐到過長的滾動區塊樣式 */
+      /* 防止 15 檔股票卡片把控制面板撐到過長的滾動區塊樣式 */
       #watchlistResult {
         max-height: 450px;
         overflow-y: auto;
@@ -51,6 +54,73 @@
       }
       .watchlist-io-links a:hover {
         text-decoration: underline;
+      }
+
+      /* 篩選與排序控制區塊樣式 */
+      .watchlist-filters {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .watchlist-filters input,
+      .watchlist-filters select {
+        min-height: 34px;
+        padding: 4px 8px;
+        font-size: 0.85rem;
+      }
+
+      /* 💡 精緻彈性 Summary 資訊列 */
+      .summary {
+        display: grid;
+        grid-template-columns: minmax(180px, 1.2fr) repeat(4, minmax(100px, 1fr)) !important;
+        gap: 12px;
+        align-items: stretch;
+      }
+
+      @media (max-width: 1024px) {
+        .summary {
+          grid-template-columns: repeat(2, 1fr) !important;
+        }
+        .summary > div:first-child {
+          grid-column: span 2;
+        }
+      }
+
+      /* 圖表 Tooltip 精緻浮動卡片 */
+      .chart-container-relative {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+      .chart-tooltip {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(23, 32, 47, 0.95);
+        color: #fff;
+        padding: 12px;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        pointer-events: none;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+        z-index: 10;
+        display: none;
+        line-height: 1.5;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        min-width: 190px;
+      }
+      .chart-tooltip div {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .chart-tooltip .title {
+        font-weight: bold;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        padding-bottom: 4px;
+        margin-bottom: 6px;
+        font-size: 0.85rem;
       }
     </style>
   </head>
@@ -74,7 +144,26 @@
             <a href="#" id="btnImportWatchlist">restore 📥 匯入歷史清單</a>
           </div>
 
-          <div class="watchlist-actions" style="margin-top: 12px;">
+          <!-- 篩選、搜尋與排序小工具面板 -->
+          <div class="watchlist-filters" style="margin-top: 8px;">
+            <input id="watchlistSearch" type="text" placeholder="🔍 搜尋代號/名稱..." />
+            <select id="watchlistFilterZone">
+              <option value="all">🎯 全部狀態</option>
+              <option value="cheap">🟢 只看悲觀/便宜區</option>
+              <option value="expensive">🔴 只看樂觀/高價區</option>
+            </select>
+          </div>
+          <div class="watchlist-filters">
+            <select id="watchlistSort" style="grid-column: span 2;">
+              <option value="default">↕️ 排序方式 (預設順序)</option>
+              <option value="code">🔤 按股票代碼排序</option>
+              <option value="price-desc">💰 按股價從高到低</option>
+              <option value="price-asc">🪙 按股價從低到高</option>
+              <option value="zone">📈 按位階低到高 (悲觀 ➡️ 樂觀)</option>
+            </select>
+          </div>
+
+          <div class="watchlist-actions" style="margin-top: 8px;">
             <button id="btnWatchlist" style="width: 100%;">🔍 執行批量掃描</button>
             <button id="btnClearWatchlist" style="width: 100%; color: white; border: none; border-radius: 6px; cursor: pointer;">🧹 全部清除</button>
           </div>
@@ -116,20 +205,36 @@
       <section class="workspace">
         <header class="summary">
           <div><p id="rangeText">--</p><h2 id="chartTitle">請選擇標的</h2></div>
-          <div class="status-card"><span>目前位階</span><strong id="zoneText">--</strong></div>
+          <!-- 💡 調整位階與 R2 在同一個卡片呈現，並新增 PE 與 殖利率 卡片 -->
+          <div class="status-card">
+            <span>目前位階 / R²</span>
+            <strong>
+              <span id="zoneText">--</span>
+              <span style="font-size:0.75rem; color:var(--muted); font-weight:normal; display:block; margin-top:2px;">R²: <span id="r2Text">--</span></span>
+            </strong>
+          </div>
           <div class="status-card"><span>收盤價</span><strong id="closeText">--</strong></div>
-          <div class="status-card"><span>R²</span><strong id="r2Text">--</strong></div>
+          <div class="status-card"><span>估算本益比</span><strong id="peText" style="color: var(--blue);">--</strong></div>
+          <div class="status-card"><span>預估殖利率</span><strong id="yieldText" style="color: var(--green);">--</strong></div>
         </header>
-        <div class="chart-card"><div id="chart" class="chart"></div></div>
+        
+        <!-- 座標軸與 Tooltip 互動包覆區 -->
+        <div class="chart-card">
+          <div class="chart-container-relative">
+            <div id="chartTooltip" class="chart-tooltip"></div>
+            <div id="chart" class="chart"></div>
+          </div>
+        </div>
+        
         <section class="table-card">
           <table>
             <thead><tr><th>線位</th><th>數值</th><th>目前位置</th></tr></thead>
             <tbody id="levelsTable"></tbody>
           </table>
-          <p class="disclaimer" style="margin-top:16px;">聲明：本工具僅供運算與模擬參考，不構成任何投資買賣建議。投資人應獨立判斷並自負盈虧風險。</p>
+          <p class="disclaimer" style="margin-top:16px;">聲明：本工具僅供運算與模擬參考，不構成任何投資買賣建議。投資人應獨立判斷並自負營虧風險。</p>
         </section>
       </section>
     </main>
-    <script src="script.js?v=2"></script>
+    <script src="script.js?v=2026"></script>
   </body>
 </html>
