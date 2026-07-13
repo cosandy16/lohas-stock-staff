@@ -91,8 +91,16 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
                 
             result = chart_data[0]
             timestamps = result.get("timestamp", [])
-            indicators = result.get("indicators", {}).get("quote", [{}])[0]
-            closes = indicators.get("close", [])
+            
+            # 💡 關鍵修改：優先抓取 Yahoo Finance 的 adjclose (還原收盤價)
+            # 還原股價會自動回補歷年配股配息（除權息）的影響，在計算長期（3.5年以上）五線譜時，能呈現最真實的投資斜率，避免除權息缺口導致軌道失真！
+            adj_indicators = result.get("indicators", {}).get("adjclose", [{}])[0]
+            closes = adj_indicators.get("adjclose", [])
+            
+            # 安全防呆：如果該特定標的（或某些特殊衍生性商品）沒有還原股價數據，則自動降級使用一般收盤價 (close)
+            if not closes or all(c is None for c in closes):
+                indicators = result.get("indicators", {}).get("quote", [{}])[0]
+                closes = indicators.get("close", [])
 
             rows = []
             for t, c in zip(timestamps, closes):
