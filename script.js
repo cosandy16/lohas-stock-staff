@@ -1,4 +1,3 @@
-// --- 台股名稱對照表 ---
 const TW_STOCK_NAMES = {
   "1101":"台泥","1102":"亞泥","1216":"統一","1301":"台塑","1303":"南亞","1326":"台化",
   "1402":"遠東新","1476":"儒鴻","1504":"東元","1590":"亞德客","1605":"華新",
@@ -10,7 +9,7 @@ const TW_STOCK_NAMES = {
   "2357":"華碩","2358":"廷鑫","2360":"致茂","2363":"矽統","2371":"大同",
   "2376":"技嘉","2377":"微星","2379":"瑞昱","2382":"廣達","2383":"台光電",
   "2385":"群光","2388":"威盛","2392":"正崴","2393":"億光","2395":"研華",
-  "2397":"友通","2399":"映泰","2401":"凌陽","2404":"漢唐","2408":"南亞科",
+  "2397":"友通","2399":"映泰","2401":"聯陽","2404":"漢唐","2408":"南亞科",
   "2409":"友達","2412":"中華電","2414":"精技","2420":"新日興","2423":"固緯",
   "2426":"鑫創","2429":"銘異","2430":"燦坤","2439":"美律","2441":"超豐",
   "2449":"京元電","2454":"聯發科","2458":"義隆","2474":"可成","2475":"矽創",
@@ -60,56 +59,51 @@ const TW_STOCK_NAMES = {
   "9938":"百和","9939":"宏全","9945":"潤泰全",
 };
 
-// 💡 新增：台美熱門股基本面資料庫 (年度預估 EPS 與 配息金額)
 const STOCK_FUNDAMENTALS = {
-  "1101": { eps: 2.2, dividend: 1.5 },     // 台泥
-  "1102": { eps: 2.8, dividend: 2.1 },     // 亞泥
-  "1216": { eps: 7.2, dividend: 5.5 },     // 統一
-  "2303": { eps: 4.5, dividend: 3.0 },     // 聯電
-  "2308": { eps: 12.8, dividend: 8.0 },    // 台達電
-  "2317": { eps: 10.2, dividend: 5.4 },    // 鴻海
-  "2330": { eps: 38.2, dividend: 16.0 },   // 台積電
-  "2379": { eps: 26.0, dividend: 18.0 },   // 瑞昱
-  "2382": { eps: 10.3, dividend: 7.2 },    // 廣達
-  "2412": { eps: 4.8, dividend: 4.7 },     // 中華電
-  "2454": { eps: 48.5, dividend: 30.4 },   // 聯發科
-  "2881": { eps: 4.8, dividend: 2.5 },     // 富邦金
-  "2882": { eps: 3.6, dividend: 2.0 },     // 國泰金
-  "2884": { eps: 1.6, dividend: 1.2 },     // 玉山金
-  "2886": { eps: 2.37, dividend: 1.5 },    // 兆豐金
-  "2891": { eps: 2.82, dividend: 1.8 },    // 中信金
-  "1476": { eps: 22.0, dividend: 17.0 },   // 儒鴻
-  "1477": { eps: 15.0, dividend: 12.2 },   // 聚陽
-  "9939": { eps: 7.8, dividend: 5.5 },     // 宏全
-  "0050": { eps: 0, dividend: 6.2 },       // 元大台灣50 (ETF無個別EPS，專注殖利率)
-  "0056": { eps: 0, dividend: 3.6 },       // 元大高股息
-  "00878": { eps: 0, dividend: 1.4 },      // 國泰永續高股息
-  "AAPL": { eps: 6.5, dividend: 1.0 },     // 蘋果
-  "MSFT": { eps: 11.8, dividend: 3.0 },    // 微軟
-  "NVDA": { eps: 1.8, dividend: 0.04 },    // 輝達
+  "1101": { eps: 2.2, dividend: 1.5 },
+  "1102": { eps: 2.8, dividend: 2.1 },
+  "1216": { eps: 7.2, dividend: 5.5 },
+  "2303": { eps: 4.5, dividend: 3.0 },
+  "2308": { eps: 12.8, dividend: 8.0 },
+  "2317": { eps: 10.2, dividend: 5.4 },
+  "2330": { eps: 38.2, dividend: 16.0 },
+  "2379": { eps: 26.0, dividend: 18.0 },
+  "2382": { eps: 10.3, dividend: 7.2 },
+  "2412": { eps: 4.8, dividend: 4.7 },
+  "2454": { eps: 48.5, dividend: 30.4 },
+  "2881": { eps: 4.8, dividend: 2.5 },
+  "2882": { eps: 3.6, dividend: 2.0 },
+  "2884": { eps: 1.6, dividend: 1.2 },
+  "2886": { eps: 2.37, dividend: 1.5 },
+  "2891": { eps: 2.82, dividend: 1.8 },
+  "1476": { eps: 22.0, dividend: 17.0 },
+  "1477": { eps: 15.0, dividend: 12.2 },
+  "9939": { eps: 7.8, dividend: 5.5 },
+  "0050": { eps: 0, dividend: 6.2 },
+  "0056": { eps: 0, dividend: 3.6 },
+  "00878": { eps: 0, dividend: 1.4 },
+  "AAPL": { eps: 6.5, dividend: 1.0 },
+  "MSFT": { eps: 11.8, dividend: 3.0 },
+  "NVDA": { eps: 1.8, dividend: 0.04 },
 };
 
-// 智慧估算引擎：若代號未在資料庫中，自動依據現價降級推算合理的歷史本益比(16倍)與殖利率(4%)
 function getFundamentals(symbol, currentPrice) {
   if (!symbol) return { eps: 10, dividend: 4 };
   const code = symbol.replace(/\.(TW|TWO)$/i, "").toUpperCase();
   if (STOCK_FUNDAMENTALS[code]) {
     return STOCK_FUNDAMENTALS[code];
   }
-  // 智慧估算：回推 16 倍 PE 與 4% 殖利率，保證任何冷門股都不會出現空數據
   const estimatedEps = +(currentPrice / 16).toFixed(2);
   const estimatedDiv = +(currentPrice * 0.04).toFixed(2);
   return { eps: estimatedEps, dividend: estimatedDiv };
 }
 
-// 取得名稱
 function getStockName(symbol) {
   if (!symbol) return "";
   const code = symbol.replace(/\.(TW|TWO)$/i, "").toUpperCase();
   return TW_STOCK_NAMES[code] || "";
 }
 
-// 格式化為：代號 + 名稱
 function formatSymbolDisplay(symbol) {
   const name = getStockName(symbol);
   return name ? `${symbol} ${name}` : symbol;
@@ -130,29 +124,24 @@ const closeText = document.querySelector("#closeText");
 const r2Text = document.querySelector("#r2Text");
 const levelsTable = document.querySelector("#levelsTable");
 
-// 💡 新增：本益比與殖利率 DOM
 const peText = document.querySelector("#peText");
 const yieldText = document.querySelector("#yieldText");
 
-// 監控清單
 const watchlistInput = document.querySelector("#watchlistInput");
 const btnWatchlist = document.querySelector("#btnWatchlist");
 const btnClearWatchlist = document.querySelector("#btnClearWatchlist");
 const watchlistResult = document.querySelector("#watchlistResult");
 const watchlistStatus = document.querySelector("#watchlistStatus");
 
-// 匯出匯入
 const btnExportWatchlist = document.querySelector("#btnExportWatchlist");
 const btnImportWatchlist = document.querySelector("#btnImportWatchlist");
 
-// 排序篩選 DOM
 const watchlistSearch = document.querySelector("#watchlistSearch");
 const watchlistFilterZone = document.querySelector("#watchlistFilterZone");
 const watchlistSort = document.querySelector("#watchlistSort");
 
-// 歷史備份與掃描快取
 let deletedWatchlistBackup = "";
-let scannedWatchlistCache = []; // 用於在前端即時篩選與排序而無需重抓 API
+let scannedWatchlistCache = [];
 
 const levelDefs = [
   { key: "plus2", label: "+2SD 樂觀線", color: "#c94b4b" },
@@ -173,13 +162,11 @@ document.addEventListener("DOMContentLoaded", () => {
   if (savedLastSymbol) symbolInput.value = savedLastSymbol;
   if (savedLastMarket) market.value = savedLastMarket;
 
-  // 監聽即時排序與篩選
   watchlistSearch.addEventListener("input", updateWatchlistDisplay);
   watchlistFilterZone.addEventListener("change", updateWatchlistDisplay);
   watchlistSort.addEventListener("change", updateWatchlistDisplay);
 });
 
-// --- 核心運算 ---
 function regression(values) {
   const n = values.length;
   const sumX = values.reduce((s, p) => s + p.x, 0);
@@ -267,13 +254,11 @@ function getZoneWeight(zoneStr) {
 
 function formatPrice(v) { return Number(v).toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
-// --- 繪圖（網格網線 + 精準防重疊 X、Y 座標軸 + 垂直懸浮追蹤 Tooltip） ---
 function renderChart(analysis) {
   const width = 1000, height = 500;
   const margin = { top: 35, right: 60, bottom: 45, left: 65 };
   const last = analysis[analysis.length - 1];
   
-  // 計算 Y 軸極限值
   const minP = Math.min(...analysis.map(p => Math.min(p.close, p.minus2))) * 0.97;
   const maxP = Math.max(...analysis.map(p => Math.max(p.close, p.plus2))) * 1.03;
   
@@ -291,7 +276,7 @@ function renderChart(analysis) {
     `;
   }
 
-  // 2. 產生 X 軸時間節點（均勻挑選 5 個時間點，防重疊）
+  // 2. 產生 X 軸時間刻度（均勻選 5 點，防止重疊）
   let xTicksHtml = "";
   const totalCount = analysis.length;
   const step = Math.floor(totalCount / 4);
@@ -308,32 +293,28 @@ function renderChart(analysis) {
     }
   });
 
-  // 3. 建立軌道線路徑
+  // 3. 繪製五線譜軌道折線
   const pathsHtml = levelDefs.map(l => {
     const pointsStr = analysis.map((p, i) => `${x(i)},${y(p[l.key])}`).join(" ");
     return `<polyline points="${pointsStr}" fill="none" stroke="${l.color}" stroke-width="${l.key === 'mid' ? 2.5 : 1.2}" opacity="0.75" />`;
   }).join("");
 
-  // 4. 建立收盤價主折線
+  // 4. 繪製收盤股價主折線
   const closePointsStr = analysis.map((p, i) => `${x(i)},${y(p.close)}`).join(" ");
 
   chart.innerHTML = `
     <svg id="svgChart" viewBox="0 0 ${width} ${height}" style="background:#fff; border-radius:12px; width:100%; height:100%;">
-      <!-- X 與 Y 軸線 -->
+      <!-- 繪製 X 與 Y 座標軸基線 -->
       <line x1="${margin.left}" y1="${height - margin.bottom}" x2="${width - margin.right}" y2="${height - margin.bottom}" stroke="#94a3b8" stroke-width="1.5" />
       <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${height - margin.bottom}" stroke="#94a3b8" stroke-width="1.5" />
       
-      <!-- 網格與座標刻度 -->
       ${yTicksHtml}
       ${xTicksHtml}
-      
-      <!-- 五線譜軌道線 -->
       ${pathsHtml}
       
-      <!-- 收盤價主線 -->
       <polyline points="${closePointsStr}" fill="none" stroke="#0f172a" stroke-width="2.5" />
       
-      <!-- 結尾亮點 -->
+      <!-- 終點亮點閃爍動畫 (若落在極端區) -->
       ${(last.close >= last.plus2 || last.close <= last.minus2) ? `
         <circle cx="${x(totalCount - 1)}" cy="${y(last.close)}" r="10" fill="${last.close >= last.plus2 ? '#c94b4b' : '#12614a'}" opacity="0.4">
           <animate attributeName="r" from="6" to="18" dur="1.2s" repeatCount="indefinite"/>
@@ -342,12 +323,11 @@ function renderChart(analysis) {
       ` : ""}
       <circle cx="${x(totalCount - 1)}" cy="${y(last.close)}" r="5" fill="#0f172a" />
       
-      <!-- Tooltip 十字互動輔助虛線（預設隱藏） -->
       <line id="tooltipLine" x1="0" y1="${margin.top}" x2="0" y2="${height - margin.bottom}" stroke="#64748b" stroke-width="1" stroke-dasharray="3 3" style="display:none;" />
     </svg>
   `;
 
-  // 5. 綁定懸浮 Tooltip 互動事件
+  // 5. 綁定 Tooltip 十字標與數據浮動視窗
   const svg = document.querySelector("#svgChart");
   const tooltipLine = document.querySelector("#tooltipLine");
   const chartTooltip = document.querySelector("#chartTooltip");
@@ -367,12 +347,10 @@ function renderChart(analysis) {
           const point = analysis[index];
           const currX = x(index);
 
-          // 顯示垂直輔助虛線
           tooltipLine.setAttribute("x1", currX);
           tooltipLine.setAttribute("x2", currX);
           tooltipLine.style.display = "block";
 
-          // 計算 Tooltip 卡片放置位置 (避開邊界)
           let tooltipLeft = currX + 15;
           if (tooltipLeft + 190 > width) {
             tooltipLeft = currX - 215;
@@ -384,7 +362,6 @@ function renderChart(analysis) {
           chartTooltip.style.left = `${tooltipLeft * scaleX}px`;
           chartTooltip.style.top = `${15 * scaleY}px`;
 
-          // 💡 智慧整合：隨滑鼠軌跡歷史動態計算歷史 PE 與 殖利率！
           const symbolCode = symbolInput.value.trim().toUpperCase();
           const pFun = getFundamentals(symbolCode, point.close);
           const histPe = pFun.eps > 0 ? `${(point.close / pFun.eps).toFixed(1)}x` : "N/A (ETF)";
@@ -434,7 +411,6 @@ function render() {
     if (r2Text) r2Text.textContent = last.r2.toFixed(3);
     if (rangeText) rangeText.textContent = getPriceRangeDesc(last);
     
-    // 💡 智慧整合：大看板更新最新 PE 與最新預估殖利率
     const symbolCode = symbolInput.value.trim().toUpperCase();
     const fun = getFundamentals(symbolCode, last.close);
     if (peText) {
@@ -453,7 +429,6 @@ function render() {
   }
 }
 
-// --- 監控清單非同步請求處理 ---
 async function fetchLevelForWatchlist(symbol) {
   let finalSym = symbol.trim().toUpperCase();
   if (!finalSym.includes(".") && /^\d+$/.test(finalSym)) finalSym += ".TW";
@@ -469,7 +444,6 @@ async function fetchLevelForWatchlist(symbol) {
   };
 }
 
-// 批量執行監控清單掃描
 btnWatchlist.addEventListener("click", async () => {
   const rawInput = watchlistInput.value;
   localStorage.setItem("lohas_watchlist", rawInput);
@@ -499,7 +473,6 @@ btnWatchlist.addEventListener("click", async () => {
   btnWatchlist.disabled = false;
 });
 
-// 即時篩選、搜尋與多重排序控制
 function updateWatchlistDisplay() {
   if (scannedWatchlistCache.length === 0) return;
 
@@ -543,7 +516,7 @@ function updateWatchlistDisplay() {
 
     const card = document.createElement("div");
     card.className = "watchlist-item";
-    card.style.cursor = "pointer"; // 💡 讓滑鼠懸停時顯示手勢，提示使用者可以點擊
+    card.style.cursor = "pointer";
 
     if (isBuySignal) {
       card.style.backgroundColor = "#e8f5e9";
@@ -560,7 +533,6 @@ function updateWatchlistDisplay() {
     const zoneColor = isSellSignal ? '#c94b4b' : (isBuySignal ? '#12614a' : '#2c6ebd');
     const smallTextColor = (isBuySignal || isSellSignal) ? '#333333' : '#666666';
 
-    // 智慧整合：小卡片清單中直接呈現 PE 與 殖利率
     const fun = getFundamentals(item.sym, item.last.close);
     const peDisp = fun.eps > 0 ? `${(item.last.close / fun.eps).toFixed(1)}x` : "N/A";
     const yieldDisp = `${((fun.dividend / item.last.close) * 100).toFixed(1)}%`;
@@ -579,9 +551,8 @@ function updateWatchlistDisplay() {
 
     card.addEventListener("click", () => {
       let rawSym = item.sym.toUpperCase();
-      let mktVal = "us"; // 預設美股
+      let mktVal = "us";
       
-      // 自動解析後綴，還原為輸入欄位的設定
       if (rawSym.includes(".TWO")) {
         mktVal = "two";
         rawSym = rawSym.replace(".TWO", "");
@@ -590,11 +561,8 @@ function updateWatchlistDisplay() {
         rawSym = rawSym.replace(".TW", "");
       }
       
-      // 填入輸入欄位與下拉選單
       symbolInput.value = rawSym;
       market.value = mktVal;
-      
-      // 模擬點擊「讀取並繪製五線譜」按鈕
       fetchSymbolBtn.click();
     });
 
@@ -602,7 +570,6 @@ function updateWatchlistDisplay() {
   });
 }
 
-// 全部清除與復原按鈕
 btnClearWatchlist.addEventListener("click", () => {
   if (btnClearWatchlist.textContent.includes("全部清除")) {
     deletedWatchlistBackup = watchlistInput.value;
@@ -625,7 +592,6 @@ btnClearWatchlist.addEventListener("click", () => {
   }
 });
 
-// 一鍵匯出
 btnExportWatchlist.addEventListener("click", (e) => {
   e.preventDefault();
   const currentText = watchlistInput.value.trim();
@@ -640,14 +606,12 @@ btnExportWatchlist.addEventListener("click", (e) => {
   });
 });
 
-// 一鍵匯入
 btnImportWatchlist.addEventListener("click", (e) => {
   e.preventDefault();
   const userInput = prompt("請貼上您先前匯出的股票代號（請用逗點隔開）：");
   if (userInput === null) return;
   const cleanedInput = userInput.trim();
   if (!cleanedInput) {
-    alert("輸入內容為空，取消匯入。");
     return;
   }
   watchlistInput.value = cleanedInput;
@@ -657,7 +621,6 @@ btnImportWatchlist.addEventListener("click", (e) => {
   watchlistStatus.textContent = "📥 歷史清單匯入成功！點擊下方按鈕即可重新掃描。";
 });
 
-// --- 詳細單檔查詢按鈕 ---
 fetchSymbolBtn.addEventListener("click", async () => {
   fetchStatus.textContent = "讀取中...";
   let inputVal = symbolInput.value.trim().toUpperCase();

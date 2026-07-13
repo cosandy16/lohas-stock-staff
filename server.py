@@ -10,11 +10,9 @@ from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parent
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8769"))
-
 
 def month_range(start_date, end_date):
     current = date(start_date.year, start_date.month, 1)
@@ -26,14 +24,12 @@ def month_range(start_date, end_date):
         else:
             current = date(current.year, current.month + 1, 1)
 
-
 def parse_twse_date(value):
     parts = value.split("/")
     if len(parts) != 3:
         raise ValueError(f"Invalid TWSE date: {value}")
     year = int(parts[0]) + 1911
     return f"{year:04d}-{int(parts[1]):02d}-{int(parts[2]):02d}"
-
 
 def parse_number(value):
     cleaned = value.replace(",", "").strip()
@@ -44,36 +40,29 @@ def parse_number(value):
     except ValueError:
         return None
 
-
-# 💡 智慧防呆：優化代號正規化邏輯
 def normalize_yahoo_symbol(raw_symbol, market):
     sym = raw_symbol.strip().upper()
     if "." in sym:
         return sym
-    
-    # 如果純數字，先根據傳入的 market 給予預設後綴
     if re.match(r"^\d+$", sym):
         if market == "two":
             return f"{sym}.TWO"
         return f"{sym}.TW"
     return sym
 
-
-# 💡 核心優化：串接 Yahoo API 的下載函式，加入上市/上櫃自動交叉容錯機制
 def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
     try:
         years = float(years_str)
     except ValueError:
         years = 3.5
 
-    # 1. 決定要嘗試的代號順序
+    # 決定嘗試下載的代號優先順序
     sym = raw_symbol.strip().upper()
     symbols_to_try = []
 
     if "." in sym:
         symbols_to_try.append(sym)
     elif re.match(r"^\d+$", sym):
-        # 如果是純數字，且使用者選 two，優先嘗試 .TWO，失敗再試 .TW
         if market == "two":
             symbols_to_try = [f"{sym}.TWO", f"{sym}.TW"]
         else:
@@ -81,7 +70,7 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
     else:
         symbols_to_try.append(sym)
 
-    # 2. 開始依序嘗試下載
+    # 依序發送請求嘗試取得歷史資料
     last_exception = None
     for yahoo_symbol in symbols_to_try:
         try:
@@ -114,7 +103,6 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             if not rows:
                 raise ValueError("解析後無有效收盤價歷史紀錄")
                 
-            # 只要成功抓到，就直接回傳結果與實際成功的代號！
             return yahoo_symbol, rows
             
         except Exception as e:
@@ -122,9 +110,7 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             print(f"嘗試抓取 {yahoo_symbol} 失敗，準備嘗試下一個可能性... 錯誤: {e}")
             continue
 
-    # 如果都失敗了，才真正拋出異常
     raise last_exception or ValueError("無法從 Yahoo Finance 取得任何資料")
-
 
 class Handler(BaseHTTPRequestHandler):
     def send_json(self, status, data):
@@ -143,7 +129,6 @@ class Handler(BaseHTTPRequestHandler):
             market = query.get("market", ["tw"])[0]
             years = query.get("years", ["3.5"])[0]
             try:
-                # 💡 改用全新的智慧容錯交叉下載函式
                 actual_symbol, data = fetch_yahoo_symbol_with_retry(raw_symbol, market, years)
                 self.send_json(200, {"symbol": actual_symbol, "source": "Yahoo Finance", "rows": data})
             except Exception as exc:
@@ -166,7 +151,6 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         print(f"{self.address_string()} - {format % args}")
-
 
 if __name__ == "__main__":
     server = ThreadingHTTPServer((HOST, PORT), Handler)
