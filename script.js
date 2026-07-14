@@ -196,7 +196,7 @@ function updateRemoveSelect() {
   });
 }
 
-btnAddWatchlistSingle.addEventListener("click", () => {
+btnAddWatchlistSingle.addEventListener("click", async () => {
   const newSym = addWatchlistInput.value.trim().toUpperCase();
   if (!newSym) return;
   
@@ -219,8 +219,17 @@ btnAddWatchlistSingle.addEventListener("click", () => {
   addWatchlistInput.value = "";
   
   updateRemoveSelect();
-  watchlistStatus.textContent = `➕ 已新增 ${newSym}！正在為您批量重掃...`;
-  btnWatchlist.click();
+  watchlistStatus.textContent = `➕ 正在即時新增並計算 ${newSym}...`;
+  
+  // 💡 智慧優化：不重跑整批！只單獨下載這檔新股票，並塞入快取
+  try {
+    const data = await fetchLevelForWatchlist(newSym);
+    scannedWatchlistCache.push(data); // 直接塞入現有的快取
+    updateWatchlistDisplay();        // 畫面瞬間刷新
+    watchlistStatus.textContent = `✅ 已成功新增 ${newSym}！`;
+  } catch (err) {
+    watchlistStatus.textContent = `❌ 即時新增 ${newSym} 失敗，請手動執行批量掃描。`;
+  }
 });
 
 btnRemoveWatchlistSingle.addEventListener("click", () => {
