@@ -44,6 +44,7 @@ def normalize_yahoo_symbol(raw_symbol, market):
     sym = raw_symbol.strip().upper()
     if "." in sym:
         return sym
+    
     if re.match(r"^\d+$", sym):
         if market == "two":
             return f"{sym}.TWO"
@@ -56,7 +57,6 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
     except ValueError:
         years = 3.5
 
-    # 決定嘗試下載的代號優先順序
     sym = raw_symbol.strip().upper()
     symbols_to_try = []
 
@@ -70,15 +70,17 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
     else:
         symbols_to_try.append(sym)
 
-    # 依序發送請求嘗試取得歷史資料
     last_exception = None
     for yahoo_symbol in symbols_to_try:
         try:
             end_dt = date.today()
+            # 下載稍微多一點的數據，預留迴歸計算所需的歷史期
             start_dt = end_dt - timedelta(days=int((years + 0.6) * 365))
             period1 = int(time.mktime(start_dt.timetuple()))
             period2 = int(time.mktime(end_dt.timetuple()))
 
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?period1={period1}?period2={period2}&interval=1d"
+            # 💡 確保 URL 參數正確拼接
             url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?period1={period1}&period2={period2}&interval=1d"
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             
@@ -92,12 +94,11 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             result = chart_data[0]
             timestamps = result.get("timestamp", [])
             
-            # 💡 關鍵修改：優先抓取 Yahoo Finance 的 adjclose (還原收盤價)
-            # 還原股價會自動回補歷年配股配息（除權息）的影響，在計算長期（3.5年以上）五線譜時，能呈現最真實的投資斜率，避免除權息缺口導致軌道失真！
+            # 💡 智慧還原股價處理：
+            # 優先讀取 adjclose (還原收盤價，已扣除配股配息缺口)，若不成功才降級讀取一般 close
             adj_indicators = result.get("indicators", {}).get("adjclose", [{}])[0]
             closes = adj_indicators.get("adjclose", [])
             
-            # 安全防呆：如果該特定標的（或某些特殊衍生性商品）沒有還原股價數據，則自動降級使用一般收盤價 (close)
             if not closes or all(c is None for c in closes):
                 indicators = result.get("indicators", {}).get("quote", [{}])[0]
                 closes = indicators.get("close", [])
@@ -138,7 +139,7 @@ class Handler(BaseHTTPRequestHandler):
             years = query.get("years", ["3.5"])[0]
             try:
                 actual_symbol, data = fetch_yahoo_symbol_with_retry(raw_symbol, market, years)
-                self.send_json(200, {"symbol": actual_symbol, "source": "Yahoo Finance", "rows": data})
+                self.send_json(200, {"symbol": actual_symbol, "source": "Yahoo Finance (Adjusted)", "rows": data})
             except Exception as exc:
                 self.send_json(400, {"error": str(exc)})
             return
