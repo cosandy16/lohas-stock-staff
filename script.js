@@ -119,20 +119,20 @@ const modelMode = document.querySelector("#modelMode");
 const chart = document.querySelector("#chart");
 const chartTitle = document.querySelector("#chartTitle");
 const rangeText = document.querySelector("#rangeText");
-const zoneText = document.querySelector("#zoneText");
-const closeText = document.querySelector("#closeText");
-const r2Text = document.querySelector("#r2Text");
-const levelsTable = document.querySelector("#levelsTable");
-
-const peText = document.querySelector("#peText");
-const yieldText = document.querySelector("#yieldText");
-
+// 監控清單 DOM
 const watchlistInput = document.querySelector("#watchlistInput");
 const btnWatchlist = document.querySelector("#btnWatchlist");
 const btnClearWatchlist = document.querySelector("#btnClearWatchlist");
 const watchlistResult = document.querySelector("#watchlistResult");
 const watchlistStatus = document.querySelector("#watchlistStatus");
 
+// 💡 新增：單檔加減股票 DOM 控制器
+const addWatchlistInput = document.querySelector("#addWatchlistInput");
+const btnAddWatchlistSingle = document.querySelector("#btnAddWatchlistSingle");
+const removeWatchlistSelect = document.querySelector("#removeWatchlistSelect");
+const btnRemoveWatchlistSingle = document.querySelector("#btnRemoveWatchlistSingle");
+
+// 匯出與匯入的按鈕 DOM
 const btnExportWatchlist = document.querySelector("#btnExportWatchlist");
 const btnImportWatchlist = document.querySelector("#btnImportWatchlist");
 
@@ -162,91 +162,91 @@ document.addEventListener("DOMContentLoaded", () => {
   if (savedLastSymbol) symbolInput.value = savedLastSymbol;
   if (savedLastMarket) market.value = savedLastMarket;
 
+  // 💡 頁面初始化時，動態生成刪除選單選項
+  updateRemoveSelect();
+
+  // 監聽即時排序與篩選
   watchlistSearch.addEventListener("input", updateWatchlistDisplay);
   watchlistFilterZone.addEventListener("change", updateWatchlistDisplay);
   watchlistSort.addEventListener("change", updateWatchlistDisplay);
 });
 
-function regression(values) {
-  const n = values.length;
-  const sumX = values.reduce((s, p) => s + p.x, 0);
-  const sumY = values.reduce((s, p) => s + p.y, 0);
-  const meanX = sumX / n;
-  const meanY = sumY / n;
-  let num = 0, den = 0;
-  for (const p of values) {
-    num += (p.x - meanX) * (p.y - meanY);
-    den += (p.x - meanX) ** 2;
-  }
-  const slope = den === 0 ? 0 : num / den;
-  const intercept = meanY - slope * meanX;
-  const fitted = values.map(p => intercept + slope * p.x);
-  const residuals = values.map((p, i) => p.y - fitted[i]);
-  const sd = Math.sqrt(residuals.reduce((s, r) => s + r ** 2, 0) / (n - 2 || 1));
-  const ssTot = values.reduce((s, p) => s + (p.y - meanY) ** 2, 0);
-  const ssRes = residuals.reduce((s, r) => s + r ** 2, 0);
-  const r2 = ssTot === 0 ? 1 : Math.max(0, 1 - ssRes / ssTot);
-  return { intercept, slope, sd, r2 };
-}
-
-function buildAnalysis(data, currentMode = modelMode.value, currentYears = periodYears.value) {
-  const years = (currentYears === "all") ? 10 : Number(currentYears);
-  const lastDate = new Date(data[data.length - 1].date);
-  const cutoff = new Date(lastDate);
-  cutoff.setDate(cutoff.getDate() - Math.round(years * 365));
-  const filtered = data.filter(p => new Date(p.date) >= cutoff);
-  if (filtered.length < 10) throw new Error("資料不足");
+function updateRemoveSelect() {
+  if (!removeWatchlistSelect) return;
+  const currentText = watchlistInput.value || "";
+  const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
   
-  const startTime = new Date(filtered[0].date).getTime();
-  const useLog = currentMode === "log";
-  const points = filtered.map(p => ({
-    ...p,
-    x: (new Date(p.date).getTime() - startTime) / 86400000,
-    y: useLog ? Math.log(p.close) : p.close
-  }));
-
-  const fit = regression(points);
-  return points.map(p => {
-    const midRaw = fit.intercept + fit.slope * p.x;
-    const conv = (v) => useLog ? Math.exp(v) : v;
-    return {
-      ...p,
-      plus2: conv(midRaw + fit.sd * 2),
-      plus1: conv(midRaw + fit.sd),
-      mid: conv(midRaw),
-      minus1: conv(midRaw - fit.sd),
-      minus2: conv(midRaw - fit.sd * 2),
-      r2: fit.r2
-    };
+  removeWatchlistSelect.innerHTML = "";
+  if (syms.length === 0) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "📭 清單為空";
+    removeWatchlistSelect.appendChild(opt);
+    return;
+  }
+  
+  syms.forEach(sym => {
+    const opt = document.createElement("option");
+    opt.value = sym;
+    opt.textContent = sym;
+    removeWatchlistSelect.appendChild(opt);
   });
 }
 
-function priceZone(p) {
-  if (p.close >= p.plus2) return "樂觀區上緣";
-  if (p.close >= p.plus1) return "相對樂觀區";
-  if (p.close >= p.mid) return "中線以上";
-  if (p.close >= p.minus1) return "中線以下";
-  if (p.close >= p.minus2) return "相對悲觀區";
-  return "悲觀區下緣";
-}
+// 💡 監聽單檔新增按鈕
+btnAddWatchlistSingle.addEventListener("click", () => {
+  const newSym = addWatchlistInput.value.trim().toUpperCase();
+  if (!newSym) return;
+  
+  const currentText = watchlistInput.value || "";
+  const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+  
+  if (syms.includes(newSym)) {
+    watchlistStatus.textContent = `⚠️ 股號 ${newSym} 已在清單中！`;
+    return;
+  }
+  
+  if (syms.length >= 15) {
+    watchlistStatus.textContent = "⚠️ 監控清單最多只能 15 支股票喔！";
+    return;
+  }
+  
+  syms.push(newSym);
+  watchlistInput.value = syms.join(", ");
+  localStorage.setItem("lohas_watchlist", watchlistInput.value);
+  addWatchlistInput.value = "";
+  
+  updateRemoveSelect();
+  watchlistStatus.textContent = `➕ 已新增 ${newSym}！正在為您批量重掃...`;
+  
+  // 智慧觸發：自動幫您點擊批量重掃按鈕
+  btnWatchlist.click();
+});
 
-function getPriceRangeDesc(p) {
-  const f = formatPrice; 
-  if (p.close >= p.plus2) return `> ${f(p.plus2)} (+2SD 樂觀線)`;
-  if (p.close >= p.plus1) return `${f(p.plus1)} (相對樂觀) ~ ${f(p.plus2)} (樂觀)`;
-  if (p.close >= p.mid) return `${f(p.mid)} (中線) ~ ${f(p.plus1)} (相對樂觀)`;
-  if (p.close >= p.minus1) return `${f(p.minus1)} (相對悲觀) ~ ${f(p.mid)} (中線)`;
-  if (p.close >= p.minus2) return `${f(p.minus2)} (悲觀) ~ ${f(p.minus1)} (相對悲觀)`;
-  return `< ${f(p.minus2)} (-2SD 悲觀線)`;
-}
+// 💡 監聽單檔刪除按鈕
+btnRemoveWatchlistSingle.addEventListener("click", () => {
+  const toRemove = removeWatchlistSelect.value;
+  if (!toRemove || toRemove === "📭 清單為空") return;
+  
+  const currentText = watchlistInput.value || "";
+  const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+  
+  const filtered = syms.filter(s => s !== toRemove);
+  watchlistInput.value = filtered.join(", ");
+  localStorage.setItem("lohas_watchlist", watchlistInput.value);
+  
+  updateRemoveSelect();
+  watchlistStatus.textContent = `➖ 已刪除 ${toRemove}`;
+  
+  // 智慧加速：無需等待整批重跑，直接從前端快取中篩掉並立即重新繪製卡片
+  scannedWatchlistCache = scannedWatchlistCache.filter(item => {
+    const symClean = item.sym.replace(".TW", "").replace(".TWO", "").toUpperCase();
+    return symClean !== toRemove;
+  });
+  updateWatchlistDisplay();
+});
 
-function getZoneWeight(zoneStr) {
-  switch (zoneStr) {
-    case "悲觀區下緣": return 1;
-    case "相對悲觀區": return 2;
-    case "中線以下": return 3;
-    case "中線以上": return 4;
-    case "相對樂觀區": return 5;
+// --- 核心運算 ---
     case "樂觀區上緣": return 6;
     default: return 0;
   }
@@ -590,11 +590,11 @@ btnClearWatchlist.addEventListener("click", () => {
     btnClearWatchlist.textContent = "🧹 全部清除";
     btnClearWatchlist.style.backgroundColor = "#667085";
   }
+  // 💡 同步更新加減選單
+  updateRemoveSelect();
 });
 
-btnExportWatchlist.addEventListener("click", (e) => {
-  e.preventDefault();
-  const currentText = watchlistInput.value.trim();
+// 一鍵匯出
   if (!currentText) {
     watchlistStatus.textContent = "⚠️ 目前清單是空的，無法匯出喔！";
     return;
@@ -612,6 +612,7 @@ btnImportWatchlist.addEventListener("click", (e) => {
   if (userInput === null) return;
   const cleanedInput = userInput.trim();
   if (!cleanedInput) {
+    alert("輸入內容為空，取消匯入。");
     return;
   }
   watchlistInput.value = cleanedInput;
@@ -619,13 +620,12 @@ btnImportWatchlist.addEventListener("click", (e) => {
   watchlistResult.innerHTML = "";
   scannedWatchlistCache = [];
   watchlistStatus.textContent = "📥 歷史清單匯入成功！點擊下方按鈕即可重新掃描。";
+  
+  // 💡 同步更新加減選單
+  updateRemoveSelect();
 });
 
-fetchSymbolBtn.addEventListener("click", async () => {
-  fetchStatus.textContent = "讀取中...";
-  let inputVal = symbolInput.value.trim().toUpperCase();
-  let selectedMarket = market.value;
-
+// --- 詳細單檔查詢按鈕 ---
   try {
     const p = new URLSearchParams({ 
       symbol: inputVal, 

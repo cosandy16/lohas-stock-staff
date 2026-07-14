@@ -144,6 +144,18 @@
             <a href="#" id="btnImportWatchlist">restore 📥 匯入歷史清單</a>
           </div>
 
+          <!-- -->
+          <div class="watchlist-single-controls" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; margin-bottom: 8px;">
+            <div style="display: flex; gap: 4px;">
+              <input id="addWatchlistInput" type="text" placeholder="➕ 新增代號" style="flex: 1; min-height: 34px; padding: 4px 8px; font-size: 0.85rem;" />
+              <button id="btnAddWatchlistSingle" style="padding: 0 10px; font-size: 0.85rem; background-color: #1f8a63; color: white; border: none; border-radius: 6px; cursor: pointer; min-height: 34px;">加</button>
+            </div>
+            <div style="display: flex; gap: 4px;">
+              <select id="removeWatchlistSelect" style="flex: 1; min-height: 34px; font-size: 0.85rem; padding: 4px; border-radius: 6px; border: 1px solid var(--line);"></select>
+              <button id="btnRemoveWatchlistSingle" style="padding: 0 10px; font-size: 0.85rem; background-color: #c94b4b; color: white; border: none; border-radius: 6px; cursor: pointer; min-height: 34px;">減</button>
+            </div>
+          </div>
+
           <!-- 篩選、搜尋與排序小工具面板 -->
           <div class="watchlist-filters" style="margin-top: 8px;">
             <input id="watchlistSearch" type="text" placeholder="🔍 搜尋代號/名稱..." />
