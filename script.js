@@ -1,45 +1,6 @@
-// 1. DOM 變數與元件選取
-const symbolInput = document.querySelector("#symbolInput");
-const market = document.querySelector("#market");
-const periodYears = document.querySelector("#periodYears");
-const modelMode = document.querySelector("#modelMode");
-const fetchSymbolBtn = document.querySelector("#fetchSymbolBtn");
-const fetchStatus = document.querySelector("#fetchStatus");
-const chart = document.querySelector("#chart");
-const chartTitle = document.querySelector("#chartTitle");
-const rangeText = document.querySelector("#rangeText");
-const zoneText = document.querySelector("#zoneText");
-const closeText = document.querySelector("#closeText");
-const r2Text = document.querySelector("#r2Text");
-const peText = document.querySelector("#peText");
-const yieldText = document.querySelector("#yieldText");
-const levelsTable = document.querySelector("#levelsTable");
-const csvInput = document.querySelector("#csvInput");
-
-// 監控清單與加減按鈕 DOM
-const watchlistInput = document.querySelector("#watchlistInput");
-const btnWatchlist = document.querySelector("#btnWatchlist");
-const btnClearWatchlist = document.querySelector("#btnClearWatchlist");
-const watchlistResult = document.querySelector("#watchlistResult");
-const watchlistStatus = document.querySelector("#watchlistStatus");
-const addWatchlistInput = document.querySelector("#addWatchlistInput");
-const btnAddWatchlistSingle = document.querySelector("#btnAddWatchlistSingle");
-const removeWatchlistSelect = document.querySelector("#removeWatchlistSelect");
-const btnRemoveWatchlistSingle = document.querySelector("#btnRemoveWatchlistSingle");
-const btnExportWatchlist = document.querySelector("#btnExportWatchlist");
-const btnImportWatchlist = document.querySelector("#btnImportWatchlist");
-const watchlistSearch = document.querySelector("#watchlistSearch");
-const watchlistFilterZone = document.querySelector("#watchlistFilterZone");
-const watchlistSort = document.querySelector("#watchlistSort");
-
-// 2. 全域狀態變數宣告
-let scannedWatchlistCache = [];
-let deletedWatchlistBackup = "";
-
-// 內建核心台美股名冊
 const TW_STOCK_NAMES = {
   "1101":"台泥","1102":"亞泥","1216":"統一","1301":"台塑","1303":"南亞","1326":"台化",
-  "1402":"遠東新","1476":"儒鴻","1477":"聚陽","1504":"東元","1590":"亞德客","1605":"華新",
+  "1402":"遠東新","1476":"儒鴻","1504":"東元","1590":"亞德客","1605":"華新",
   "2002":"中鋼","2006":"東和鋼鐵","2015":"豐興","2049":"上銀","2059":"川湖",
   "2101":"南港","2105":"正新","2207":"和泰車","2227":"裕日車","2231":"為升",
   "2301":"光寶科","2303":"聯電","2308":"台達電","2312":"金寶","2317":"鴻海",
@@ -48,12 +9,54 @@ const TW_STOCK_NAMES = {
   "2357":"華碩","2358":"廷鑫","2360":"致茂","2363":"矽統","2371":"大同",
   "2376":"技嘉","2377":"微星","2379":"瑞昱","2382":"廣達","2383":"台光電",
   "2385":"群光","2388":"威盛","2392":"正崴","2393":"億光","2395":"研華",
-  "2408":"南亞科","2409":"友達","2412":"中華電","2454":"聯發科","2474":"可成",
-  "2603":"長榮","2609":"陽明","2615":"萬海","2618":"長榮航","2881":"富邦金",
-  "2882":"國泰金","2884":"玉山金","2886":"兆豐金","2891":"中信金","3008":"大立光",
-  "3034":"聯詠","3035":"智原","3037":"欣興","3231":"緯創","3443":"創意",
-  "3661":"世芯-KY","4966":"譜瑞-KY","5347":"世界","6415":"矽力-KY","6505":"台塑化",
-  "6669":"緯穎","9910":"豐泰","9921":"巨大","9939":"宏全"
+  "2397":"友通","2399":"映泰","2401":"聯陽","2404":"漢唐","2408":"南亞科",
+  "2409":"友達","2412":"中華電","2414":"精技","2420":"新日興","2423":"固緯",
+  "2426":"鑫創","2429":"銘異","2430":"燦坤","2439":"美律","2441":"超豐",
+  "2449":"京元電","2454":"聯發科","2458":"義隆","2474":"可成","2475":"矽創",
+  "2481":"強茂","2489":"瑞軒","2492":"華新科","2496":"卓越","2498":"宏達電",
+  "2501":"國建","2502":"長谷","2542":"興富發","2545":"皇翔","2548":"華固",
+  "2601":"益航","2603":"長榮","2606":"裕民","2609":"陽明","2610":"華航",
+  "2615":"萬海","2618":"長榮航","2707":"晶華","2727":"王品","2809":"京城銀",
+  "2812":"台中銀","2820":"華泰銀","2834":"臺企銀","2836":"安泰銀","2838":"聯邦銀",
+  "2845":"遠東銀","2849":"安泰金","2850":"新產","2851":"中再保","2852":"第一保",
+  "2880":"華南金","2881":"富邦金","2882":"國泰金","2883":"開發金","2884":"玉山金",
+  "2885":"元大金","2886":"兆豐金","2887":"台新金","2888":"新光金","2889":"國票金",
+  "2890":"永豐金","2891":"中信金","2892":"第一金","2912":"統一超","3008":"大立光",
+  "3014":"聯陽","3017":"奇鋐","3019":"亞泰","3022":"威剛","3034":"聯詠",
+  "3035":"智原","3037":"欣興","3041":"揚智","3042":"晶技","3044":"健鼎",
+  "3045":"台灣大","3046":"建碁","3047":"訊舟","3051":"力特","3052":"夆典",
+  "3054":"立積","3057":"喬鼎","3058":"立誠","3059":"鴻鈞","3085":"比比昂",
+  "3086":"華義","3088":"艾雷斯","3094":"聯傑","3105":"穩懋","3106":"楊博",
+  "3130":"一零四","3149":"正達","3150":"萬達通","3189":"景碩","3231":"緯創",
+  "3234":"光環","3293":"鈊象","3294":"英濟","3406":"玉晶光","3443":"創意",
+  "3481":"群創","3504":"揚明光","3529":"力旺","3533":"嘉澤","3545":"旭隼",
+  "3673":"TPK","3682":"亞太電","3689":"湧德","3698":"隆達","3702":"大聯大",
+  "3706":"神達","3711":"日月光投控","3714":"富采","3715":"定穎投控","3726":"皇電",
+  "3760":"泓格","3762":"鑫龍騰","3769":"楠梓電","3776":"長科","4104":"佳醫",
+  "4108":"懷特","4137":"麗豐-KY","4147":"中裕","4148":"全宇生技","4164":"基亞",
+  "4174":"浩鼎","4180":"嘉進","4183":"福永興","4205":"中華食","4303":"信昌電",
+  "4438":"廣越","4509":"恒耀","4551":"智崴","4966":"譜瑞-KY","5007":"三星",
+  "5009":"榮剛","5014":"中連貨","5015":"華祺","5016":"鑠禧","5212":"凌網",
+  "5215":"科定","5234":"達興材料","5288":"豐藝","5347":"世界","5349":"先豐",
+  "5371":"中光電","5381":"合正","5388":"中磊","5398":"拓墣","5434":"崇越電",
+  "5522":"遠雄","5533":"皇昌","5536":"聖暉","5538":"東明","5546":"永信建",
+  "5608":"四維航","5871":"中租-KY","5876":"上海商銀","5880":"合庫金",
+  "6005":"群益證","6104":"創惟","6112":"聚碩","6116":"彩晶","6121":"新普","6133":"金橋",
+  "6153":"嘉聯益","6196":"帆宣","6197":"佳必琪","6201":"亞弘電","6202":"盛群",
+  "6204":"艾訊","6208":"日揚","6215":"和椿","6216":"居易","6220":"岱稜",
+  "6225":"旺矽","6230":"超眾","6239":"力成","6243":"迅杰","6257":"矽瑪",
+  "6261":"久元","6262":"倚天酷碁","6269":"台郡","6271":"同欣電","6274":"台燿",
+  "6278":"台表科","6279":"胡連","6281":"全國電","6282":"康舒","6285":"啟碁",
+  "6290":"良維","6291":"沛亨","6294":"智晶","6295":"捷力",
+  "6355":"信紘科","6409":"旭隼","6414":"樺漢","6415":"矽力-KY","6416":"瑞祺電通",
+  "6488":"環球晶","6505":"台塑化","6510":"精測","6515":"穎崴","6516":"勤誠",
+  "6533":"晶心科","6592":"和潤企業","6605":"帝寶","6618":"台康生技","6625":"必應",
+  "6669":"緯穎","6679":"台嘉碩","6691":"洋基工程","6719":"力旺","6770":"力積電",
+  "8046":"南電","8048":"德勝","8050":"廣積","8069":"元太","8086":"宏捷科",
+  "8150":"南茂","8215":"明基材","8299":"群聯","8341":"日友","8410":"森崴能源",
+  "8422":"可寧衛","8436":"大江","8437":"大學光","8448":"遠傳","8454":"富邦媒",
+  "9904":"寶成","9910":"豐泰","9917":"中保科","9921":"巨大","9933":"中鼎",
+  "9938":"百和","9939":"宏全","9945":"潤泰全",
 };
 
 const STOCK_FUNDAMENTALS = {
@@ -76,9 +79,12 @@ const STOCK_FUNDAMENTALS = {
   "1476": { eps: 22.0, dividend: 17.0 },
   "1477": { eps: 15.0, dividend: 12.2 },
   "9939": { eps: 7.8, dividend: 5.5 },
+  "0050": { eps: 0, dividend: 6.2 },
+  "0056": { eps: 0, dividend: 3.6 },
+  "00878": { eps: 0, dividend: 1.4 },
   "AAPL": { eps: 6.5, dividend: 1.0 },
   "MSFT": { eps: 11.8, dividend: 3.0 },
-  "NVDA": { eps: 1.8, dividend: 0.04 }
+  "NVDA": { eps: 1.8, dividend: 0.04 },
 };
 
 function getFundamentals(symbol, currentPrice) {
@@ -103,13 +109,149 @@ function formatSymbolDisplay(symbol) {
   return name ? `${symbol} ${name}` : symbol;
 }
 
+const csvInput = document.querySelector("#csvInput");
+const market = document.querySelector("#market");
+const symbolInput = document.querySelector("#symbolInput");
+const fetchSymbolBtn = document.querySelector("#fetchSymbolBtn");
+const fetchStatus = document.querySelector("#fetchStatus");
+const periodYears = document.querySelector("#periodYears");
+const modelMode = document.querySelector("#modelMode");
+const chart = document.querySelector("#chart");
+const chartTitle = document.querySelector("#chartTitle");
+const rangeText = document.querySelector("#rangeText");
+const zoneText = document.querySelector("#zoneText");
+const closeText = document.querySelector("#closeText");
+const r2Text = document.querySelector("#r2Text");
+const levelsTable = document.querySelector("#levelsTable");
+
+const peText = document.querySelector("#peText");
+const yieldText = document.querySelector("#yieldText");
+
+const watchlistInput = document.querySelector("#watchlistInput");
+const btnWatchlist = document.querySelector("#btnWatchlist");
+const btnClearWatchlist = document.querySelector("#btnClearWatchlist");
+const watchlistResult = document.querySelector("#watchlistResult");
+const watchlistStatus = document.querySelector("#watchlistStatus");
+
+const addWatchlistInput = document.querySelector("#addWatchlistInput");
+const btnAddWatchlistSingle = document.querySelector("#btnAddWatchlistSingle");
+const removeWatchlistSelect = document.querySelector("#removeWatchlistSelect");
+const btnRemoveWatchlistSingle = document.querySelector("#btnRemoveWatchlistSingle");
+
+const btnExportWatchlist = document.querySelector("#btnExportWatchlist");
+const btnImportWatchlist = document.querySelector("#btnImportWatchlist");
+
+const watchlistSearch = document.querySelector("#watchlistSearch");
+const watchlistFilterZone = document.querySelector("#watchlistFilterZone");
+const watchlistSort = document.querySelector("#watchlistSort");
+
+let deletedWatchlistBackup = "";
+let scannedWatchlistCache = [];
+
 const levelDefs = [
-  { key: "plus2", label: "+2SD 樂觀線", color: "#c94b4b", bg: "bg-red-50 text-red-700" },
-  { key: "plus1", label: "+1SD 相對樂觀線", color: "#d9852b", bg: "bg-orange-50 text-orange-700" },
-  { key: "mid", label: "中線", color: "#2c6ebd", bg: "bg-blue-50 text-blue-700" },
-  { key: "minus1", label: "-1SD 相對悲觀線", color: "#1f8a63", bg: "bg-emerald-50 text-emerald-700" },
-  { key: "minus2", label: "-2SD 悲觀線", color: "#12614a", bg: "bg-teal-50 text-teal-700" }
+  { key: "plus2", label: "+2SD 樂觀線", color: "#c94b4b" },
+  { key: "plus1", label: "+1SD 相對樂觀線", color: "#d9852b" },
+  { key: "mid", label: "中線", color: "#2c6ebd" },
+  { key: "minus1", label: "-1SD 相對悲觀線", color: "#1f8a63" },
+  { key: "minus2", label: "-2SD 悲觀線", color: "#12614a" },
 ];
+
+document.addEventListener("DOMContentLoaded", () => {
+  const savedWatchlist = localStorage.getItem("lohas_watchlist");
+  if (savedWatchlist) {
+    watchlistInput.value = savedWatchlist;
+  }
+
+  const savedLastSymbol = localStorage.getItem("lohas_last_symbol");
+  const savedLastMarket = localStorage.getItem("lohas_last_market");
+  if (savedLastSymbol) symbolInput.value = savedLastSymbol;
+  if (savedLastMarket) market.value = savedLastMarket;
+
+  updateRemoveSelect();
+
+  watchlistSearch.addEventListener("input", updateWatchlistDisplay);
+  watchlistFilterZone.addEventListener("change", updateWatchlistDisplay);
+  watchlistSort.addEventListener("change", updateWatchlistDisplay);
+});
+
+function updateRemoveSelect() {
+  if (!removeWatchlistSelect) return;
+  const currentText = watchlistInput.value || "";
+  const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+  
+  removeWatchlistSelect.innerHTML = "";
+  if (syms.length === 0) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "📭 清單為空";
+    removeWatchlistSelect.appendChild(opt);
+    return;
+  }
+  
+  syms.forEach(sym => {
+    const opt = document.createElement("option");
+    opt.value = sym;
+    opt.textContent = sym;
+    removeWatchlistSelect.appendChild(opt);
+  });
+}
+
+btnAddWatchlistSingle.addEventListener("click", async () => {
+  const newSym = addWatchlistInput.value.trim().toUpperCase();
+  if (!newSym) return;
+  
+  const currentText = watchlistInput.value || "";
+  const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+  
+  if (syms.includes(newSym)) {
+    watchlistStatus.textContent = `⚠️ 股號 ${newSym} 已在清單中！`;
+    return;
+  }
+  
+  if (syms.length >= 15) {
+    watchlistStatus.textContent = "⚠️ 監控清單最多只能 15 支股票喔！";
+    return;
+  }
+  
+  syms.push(newSym);
+  watchlistInput.value = syms.join(", ");
+  localStorage.setItem("lohas_watchlist", watchlistInput.value);
+  addWatchlistInput.value = "";
+  
+  updateRemoveSelect();
+  watchlistStatus.textContent = `➕ 正在即時新增並計算 ${newSym}...`;
+  
+  // 💡 智慧優化：不重跑整批！只單獨下載這檔新股票，並塞入快取
+  try {
+    const data = await fetchLevelForWatchlist(newSym);
+    scannedWatchlistCache.push(data); // 直接塞入現有的快取
+    updateWatchlistDisplay();        // 畫面瞬間刷新
+    watchlistStatus.textContent = `✅ 已成功新增 ${newSym}！`;
+  } catch (err) {
+    watchlistStatus.textContent = `❌ 即時新增 ${newSym} 失敗，請手動執行批量掃描。`;
+  }
+});
+
+btnRemoveWatchlistSingle.addEventListener("click", () => {
+  const toRemove = removeWatchlistSelect.value;
+  if (!toRemove || toRemove === "📭 清單為空") return;
+  
+  const currentText = watchlistInput.value || "";
+  const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+  
+  const filtered = syms.filter(s => s !== toRemove);
+  watchlistInput.value = filtered.join(", ");
+  localStorage.setItem("lohas_watchlist", watchlistInput.value);
+  
+  updateRemoveSelect();
+  watchlistStatus.textContent = `➖ 已刪除 ${toRemove}`;
+  
+  scannedWatchlistCache = scannedWatchlistCache.filter(item => {
+    const symClean = item.sym.replace(".TW", "").replace(".TWO", "").toUpperCase();
+    return symClean !== toRemove;
+  });
+  updateWatchlistDisplay();
+});
 
 function regression(values) {
   const n = values.length;
@@ -216,9 +358,8 @@ function renderChart(analysis) {
     const tickVal = minP + (i / 4) * (maxP - minP);
     const tickY = y(tickVal);
     yTicksHtml += `
-      <line x1="${margin.left}" y1="${tickY}" x2="${width - margin.right}" y2="${tickY}" stroke="#f1f5f9" stroke-width="1.5" />
       <line x1="${margin.left}" y1="${tickY}" x2="${width - margin.right}" y2="${tickY}" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 4" />
-      <text x="${margin.left - 10}" y="${tickY + 4}" fill="#64748b" font-size="11" font-weight="600" text-anchor="end">${formatPrice(tickVal)}</text>
+      <text x="${margin.left - 10}" y="${tickY + 4}" fill="#64748b" font-size="12" text-anchor="end">${formatPrice(tickVal)}</text>
     `;
   }
 
@@ -232,34 +373,38 @@ function renderChart(analysis) {
       const tickX = x(idx);
       const rawDate = analysis[idx].date;
       xTicksHtml += `
-        <line x1="${tickX}" y1="${height - margin.bottom}" x2="${tickX}" y2="${height - margin.bottom + 6}" stroke="#cbd5e1" stroke-width="1.5" />
-        <text x="${tickX}" y="${height - margin.bottom + 22}" fill="#64748b" font-size="11" font-weight="600" text-anchor="middle">${rawDate}</text>
+        <line x1="${tickX}" y1="${height - margin.bottom}" x2="${tickX}" y2="${height - margin.bottom + 6}" stroke="#94a3b8" stroke-width="1" />
+        <text x="${tickX}" y="${height - margin.bottom + 22}" fill="#64748b" font-size="12" text-anchor="middle">${rawDate}</text>
       `;
     }
   });
 
   const pathsHtml = levelDefs.map(l => {
     const pointsStr = analysis.map((p, i) => `${x(i)},${y(p[l.key])}`).join(" ");
-    return `<polyline points="${pointsStr}" fill="none" stroke="${l.color}" stroke-width="${l.key === 'mid' ? 2.5 : 1.2}" opacity="0.75" stroke-linecap="round" />`;
+    return `<polyline points="${pointsStr}" fill="none" stroke="${l.color}" stroke-width="${l.key === 'mid' ? 2.5 : 1.2}" opacity="0.75" />`;
   }).join("");
 
   const closePointsStr = analysis.map((p, i) => `${x(i)},${y(p.close)}`).join(" ");
 
   chart.innerHTML = `
-    <svg id="svgChart" viewBox="0 0 ${width} ${height}" style="background:#fff; width:100%; height:100%;" class="cursor-crosshair select-none">
-      <line x1="${margin.left}" y1="${height - margin.bottom}" x2="${width - margin.right}" y2="${height - margin.bottom}" stroke="#cbd5e1" stroke-width="1.5" />
-      <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${height - margin.bottom}" stroke="#cbd5e1" stroke-width="1.5" />
+    <svg id="svgChart" viewBox="0 0 ${width} ${height}" style="background:#fff; border-radius:12px; width:100%; height:100%;">
+      <line x1="${margin.left}" y1="${height - margin.bottom}" x2="${width - margin.right}" y2="${height - margin.bottom}" stroke="#94a3b8" stroke-width="1.5" />
+      <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${height - margin.bottom}" stroke="#94a3b8" stroke-width="1.5" />
+      
       ${yTicksHtml}
       ${xTicksHtml}
       ${pathsHtml}
-      <polyline points="${closePointsStr}" fill="none" stroke="#0f172a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />
+      
+      <polyline points="${closePointsStr}" fill="none" stroke="#0f172a" stroke-width="2.5" />
+      
       ${(last.close >= last.plus2 || last.close <= last.minus2) ? `
         <circle cx="${x(totalCount - 1)}" cy="${y(last.close)}" r="10" fill="${last.close >= last.plus2 ? '#c94b4b' : '#12614a'}" opacity="0.4">
           <animate attributeName="r" from="6" to="18" dur="1.2s" repeatCount="indefinite"/>
           <animate attributeName="opacity" from="0.6" to="0" dur="1.2s" repeatCount="indefinite"/>
         </circle>
       ` : ""}
-      <circle cx="${x(totalCount - 1)}" cy="${y(last.close)}" r="5.5" fill="#0f172a" />
+      <circle cx="${x(totalCount - 1)}" cy="${y(last.close)}" r="5" fill="#0f172a" />
+      
       <line id="tooltipLine" x1="0" y1="${margin.top}" x2="0" y2="${height - margin.bottom}" stroke="#64748b" stroke-width="1" stroke-dasharray="3 3" style="display:none;" />
     </svg>
   `;
@@ -288,8 +433,8 @@ function renderChart(analysis) {
           tooltipLine.style.display = "block";
 
           let tooltipLeft = currX + 15;
-          if (tooltipLeft + 200 > width) {
-            tooltipLeft = currX - 220;
+          if (tooltipLeft + 190 > width) {
+            tooltipLeft = currX - 215;
           }
           const scaleX = rect.width / width;
           const scaleY = rect.height / height;
@@ -300,19 +445,19 @@ function renderChart(analysis) {
 
           const symbolCode = symbolInput.value.trim().toUpperCase();
           const pFun = getFundamentals(symbolCode, point.close);
-          const histPe = pFun.eps > 0 ? `${(point.close / pFun.eps).toFixed(1)}x` : "N/A";
+          const histPe = pFun.eps > 0 ? `${(point.close / pFun.eps).toFixed(1)}x` : "N/A (ETF)";
           const histYield = `${((pFun.dividend / point.close) * 100).toFixed(2)}%`;
 
           chartTooltip.innerHTML = `
-            <div class="font-extrabold border-b border-slate-700 pb-1.5 mb-1.5 text-indigo-400">${point.date}</div>
-            <div class="flex justify-between"><span>還原價:</span><strong class="text-white">${formatPrice(point.close)}</strong></div>
-            <div class="flex justify-between"><span>估計 PE:</span><strong class="text-blue-300">${histPe}</strong></div>
-            <div class="flex justify-between"><span>配息殖利率:</span><strong class="text-emerald-300">${histYield}</strong></div>
-            <div class="border-t border-slate-700/50 mt-1.5 pt-1.5 text-[10px] space-y-0.5 text-slate-300">
-              <div class="flex justify-between"><span>+2SD 樂觀:</span><span>${formatPrice(point.plus2)}</span></div>
-              <div class="flex justify-between"><span>中線 mid:</span><span>${formatPrice(point.mid)}</span></div>
-              <div class="flex justify-between"><span>-2SD 悲觀:</span><span>${formatPrice(point.minus2)}</span></div>
-            </div>
+            <div class="title">${point.date}</div>
+            <div><span>收盤價:</span><strong>${formatPrice(point.close)}</strong></div>
+            <div><span>本益比:</span><strong style="color:var(--blue);">${histPe}</strong></div>
+            <div><span>估計殖利率:</span><strong style="color:var(--green);">${histYield}</strong></div>
+            <div style="border-top:1px dashed rgba(255,255,255,0.15); margin-top:4px; padding-top:4px;"><span>+2SD 樂觀:</span><span>${formatPrice(point.plus2)}</span></div>
+            <div><span>+1SD 偏樂:</span><span>${formatPrice(point.plus1)}</span></div>
+            <div><span>中線:</span><span>${formatPrice(point.mid)}</span></div>
+            <div><span>-1SD 偏悲:</span><span>${formatPrice(point.minus1)}</span></div>
+            <div><span>-2SD 悲觀:</span><span>${formatPrice(point.minus2)}</span></div>
           `;
         }
       } else {
@@ -341,7 +486,7 @@ function render() {
     
     if (zoneText) {
       zoneText.textContent = priceZone(last);
-      zoneText.className = "text-lg font-black block leading-tight " + (last.close >= last.plus2 ? "text-red-600" : (last.close <= last.minus2 ? "text-emerald-700" : "text-slate-900"));
+      zoneText.style.color = (last.close >= last.plus2) ? "#c94b4b" : (last.close <= last.minus2 ? "#12614a" : "var(--ink)");
     }
     if (closeText) closeText.textContent = formatPrice(last.close);
     if (r2Text) r2Text.textContent = last.r2.toFixed(3);
@@ -349,160 +494,35 @@ function render() {
     
     const symbolCode = symbolInput.value.trim().toUpperCase();
     const fun = getFundamentals(symbolCode, last.close);
-    if (peText) peText.textContent = fun.eps > 0 ? `${(last.close / fun.eps).toFixed(1)}x` : "N/A";
-    if (yieldText) yieldText.textContent = `${((fun.dividend / last.close) * 100).toFixed(2)}%`;
+    if (peText) {
+      peText.textContent = fun.eps > 0 ? `${(last.close / fun.eps).toFixed(1)} 倍` : "N/A (ETF)";
+    }
+    if (yieldText) {
+      yieldText.textContent = `${((fun.dividend / last.close) * 100).toFixed(2)} %`;
+    }
 
     renderChart(analysis);
-    
     if (levelsTable) {
-      levelsTable.innerHTML = levelDefs.map(l => {
-        const isActive = priceZone(last) === l.label;
-        return `
-          <tr class="hover:bg-slate-50 transition ${isActive ? 'bg-indigo-50/50' : ''}">
-            <td class="py-3 flex items-center">
-              <span class="inline-block w-2.5 h-2.5 rounded-full mr-2" style="background-color:${l.color}"></span>
-              ${l.label}
-            </td>
-            <td class="py-3 font-semibold text-slate-800">${formatPrice(last[l.key])}</td>
-            <td class="py-3 text-center">
-              ${isActive ? `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold ${l.bg}">● 當前位階</span>` : '--'}
-            </td>
-          </tr>
-        `;
-      }).join("");
+      levelsTable.innerHTML = levelDefs.map(l => `<tr><td>${l.label}</td><td>${formatPrice(last[l.key])}</td><td>${priceZone(last) === l.label ? "●" : ""}</td></tr>`).join("");
     }
   } catch (e) {
     console.error("渲染出錯：", e);
   }
 }
 
-function updateRemoveSelect() {
-  if (!removeWatchlistSelect) return;
-  const currentText = watchlistInput.value || "";
-  const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
-  
-  removeWatchlistSelect.innerHTML = "";
-  if (syms.length === 0) {
-    const opt = document.createElement("option");
-    opt.value = "";
-    opt.textContent = "📭 清單為空";
-    removeWatchlistSelect.appendChild(opt);
-    return;
-  }
-  
-  syms.forEach(sym => {
-    const opt = document.createElement("option");
-    opt.value = sym;
-    opt.textContent = sym;
-    removeWatchlistSelect.appendChild(opt);
-  });
-}
-
-btnAddWatchlistSingle.addEventListener("click", () => {
-  const newSym = addWatchlistInput.value.trim().toUpperCase();
-  if (!newSym) return;
-  
-  const currentText = watchlistInput.value || "";
-  const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
-  
-  if (syms.includes(newSym)) {
-    watchlistStatus.textContent = `⚠️ 代號 ${newSym} 已在清單中！`;
-    return;
-  }
-  
-  if (syms.length >= 15) {
-    watchlistStatus.textContent = "⚠️ 清單上限最多 15 支股票！";
-    return;
-  }
-  
-  syms.push(newSym);
-  watchlistInput.value = syms.join(", ");
-  localStorage.setItem("lohas_watchlist", watchlistInput.value);
-  addWatchlistInput.value = "";
-  
-  updateRemoveSelect();
-  watchlistStatus.textContent = `➕ 已新增 ${newSym}！請重新掃描。`;
-  btnWatchlist.click();
-});
-
-btnRemoveWatchlistSingle.addEventListener("click", () => {
-  const toRemove = removeWatchlistSelect.value;
-  if (!toRemove || toRemove === "📭 清單為空") return;
-  
-  const currentText = watchlistInput.value || "";
-  const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
-  
-  const filtered = syms.filter(s => s !== toRemove);
-  watchlistInput.value = filtered.join(", ");
-  localStorage.setItem("lohas_watchlist", filtered.join(", "));
-  
-  updateRemoveSelect();
-  watchlistStatus.textContent = `➖ 已成功移除 ${toRemove}`;
-  
-  scannedWatchlistCache = scannedWatchlistCache.filter(item => {
-    const symClean = item.sym.replace(".TW", "").replace(".TWO", "").toUpperCase();
-    return symClean !== toRemove;
-  });
-  updateWatchlistDisplay();
-});
-
-function mockStockAPI(symbol, yearsStr) {
-  const years = parseFloat(yearsStr) || 3.5;
-  const totalDays = Math.round(years * 365);
-  const rows = [];
-  
-  let basePrice = 200;
-  const symUpper = symbol.toUpperCase();
-  if (symUpper.includes("2330")) basePrice = 930;
-  else if (symUpper.includes("1477")) basePrice = 217;
-  else if (symUpper.includes("2412")) basePrice = 118;
-  else if (symUpper.includes("AAPL")) basePrice = 220;
-  else if (symUpper.includes("NVDA")) basePrice = 125;
-  
-  let p = basePrice - (totalDays * 0.05);
-  const now = Date.now();
-  
-  for (let i = 0; i < totalDays; i++) {
-    const dateObj = new Date(now - (totalDays - i) * 86400000);
-    const trend = Math.sin(i / 100) * (basePrice * 0.08) + (i * 0.1); 
-    const noise = (Math.random() - 0.495) * (basePrice * 0.025);
-    const closeVal = Math.max(10, p + trend + noise);
-    
-    rows.push({
-      date: dateObj.toISOString().split('T')[0],
-      close: parseFloat(closeVal.toFixed(2))
-    });
-  }
-  return { symbol: symbol, rows: rows };
-}
-
-async function smartFetch(url) {
-  const isPreviewEnv = window.location.hostname === "" || 
-                       window.location.protocol === "file:" || 
-                       window.location.hostname.includes("sandbox") || 
-                       window.location.hostname.includes("webcontainer") || 
-                       window.location.hostname.includes("github") || 
-                       window.location.port !== "8769";
-
-  if (isPreviewEnv) {
-    const parsed = new URL(url, window.location.origin);
-    if (parsed.pathname === "/api/yahoo") {
-      const symbol = parsed.searchParams.get("symbol") || "1477";
-      const years = parsed.searchParams.get("years") || "3.5";
-      return {
-        ok: true,
-        json: async () => {
-          const mockData = mockStockAPI(symbol, years);
-          return {
-            symbol: formatSymbolDisplay(symbol),
-            source: "Yahoo Finance (Mocked Preview)",
-            rows: mockData.rows
-          };
-        }
-      };
-    }
-  }
-  return fetch(url);
+async function fetchLevelForWatchlist(symbol) {
+  let finalSym = symbol.trim().toUpperCase();
+  if (!finalSym.includes(".") && /^\d+$/.test(finalSym)) finalSym += ".TW";
+  const p = new URLSearchParams({ symbol: finalSym.replace(".TW","").replace(".TWO",""), market: finalSym.includes(".TWO") ? "two" : (finalSym.includes(".TW") ? "tw" : "us"), years: "3.5" });
+  const res = await fetch(`/api/yahoo?${p.toString()}`);
+  if (!res.ok) throw new Error();
+  const json = await res.json();
+  const analysis = buildAnalysis(json.rows, "linear", "3.5");
+  return { 
+    sym: json.symbol, 
+    last: analysis[analysis.length - 1], 
+    name: getStockName(json.symbol) 
+  };
 }
 
 btnWatchlist.addEventListener("click", async () => {
@@ -519,29 +539,16 @@ btnWatchlist.addEventListener("click", async () => {
   let currentIndex = 0;
   for (const s of syms) {
     currentIndex++;
-    watchlistStatus.textContent = `🔍 正在計算五線譜... (${currentIndex} / ${totalStocks})`;
+    watchlistStatus.textContent = `🔍 正在掃描區間... (${currentIndex} / ${totalStocks})`;
 
     try {
-      let finalSym = s.toUpperCase();
-      if (!finalSym.includes(".") && /^\d+$/.test(finalSym)) finalSym += ".TW";
-      const isTwo = finalSym.includes(".TWO");
-      const marketParam = isTwo ? "two" : (finalSym.includes(".TW") ? "tw" : "us");
-      
-      const url = `/api/yahoo?symbol=${finalSym.replace(".TW","").replace(".TWO","")}&market=${marketParam}&years=3.5`;
-      const res = await smartFetch(url);
-      const json = await res.json();
-      
-      const analysis = buildAnalysis(json.rows, "linear", "3.5");
-      scannedWatchlistCache.push({
-        sym: json.symbol,
-        last: analysis[analysis.length - 1],
-        name: getStockName(json.symbol)
-      });
+      const data = await fetchLevelForWatchlist(s);
+      scannedWatchlistCache.push(data);
       updateWatchlistDisplay();
-    } catch (e) {
-      watchlistResult.innerHTML += `<div class="text-rose-500 text-xs p-2">❌ ${s} 計算失敗</div>`;
+    } catch {
+      watchlistResult.innerHTML += `<div style="color:red; font-size:0.8rem; padding:8px;">❌ ${s} 失敗</div>`;
     }
-    await new Promise(r => setTimeout(r, 100));
+    await new Promise(r => setTimeout(r, 500));
   }
   watchlistStatus.textContent = `✅ 掃描完成 (共 ${scannedWatchlistCache.length} 檔)`;
   btnWatchlist.disabled = false;
@@ -556,6 +563,7 @@ function updateWatchlistDisplay() {
 
   let resultList = scannedWatchlistCache.filter(item => {
     const matchSearch = item.sym.toLowerCase().includes(searchQuery) || item.name.toLowerCase().includes(searchQuery);
+    
     const zone = priceZone(item.last);
     let matchZone = true;
     if (filterZone === "cheap") {
@@ -563,6 +571,7 @@ function updateWatchlistDisplay() {
     } else if (filterZone === "expensive") {
       matchZone = (zone === "樂觀區上緣" || zone === "相對樂觀區" || zone === "中線以上");
     }
+
     return matchSearch && matchZone;
   });
 
@@ -578,7 +587,7 @@ function updateWatchlistDisplay() {
 
   watchlistResult.innerHTML = "";
   if (resultList.length === 0) {
-    watchlistResult.innerHTML = `<div class="text-slate-400 text-xs text-center py-6">無符合條件的標的</div>`;
+    watchlistResult.innerHTML = `<div style="color:var(--muted); font-size:0.85rem; padding:12px; text-align:center;">無符合篩選條件的標的</div>`;
     return;
   }
 
@@ -587,34 +596,37 @@ function updateWatchlistDisplay() {
     const isBuySignal = item.last.close <= item.last.minus2; 
 
     const card = document.createElement("div");
-    card.className = "watchlist-item hover-trigger p-3 border rounded-xl flex justify-between items-center bg-white cursor-pointer select-none transition duration-150";
+    card.className = "watchlist-item";
+    card.style.cursor = "pointer";
 
     if (isBuySignal) {
-      card.style.backgroundColor = "#f0fdf4";
-      card.style.borderColor = "#bbf7d0";
-      card.style.borderLeft = "5px solid #12614a";
+      card.style.backgroundColor = "#e8f5e9";
+      card.style.border = "1px solid #a5d6a7";
+      card.style.borderLeft = "6px solid #12614a";
     } else if (isSellSignal) {
-      card.style.backgroundColor = "#fef2f2";
-      card.style.borderColor = "#fecaca";
-      card.style.borderLeft = "5px solid #c94b4b";
+      card.style.backgroundColor = "#ffebee";
+      card.style.border = "1px solid #ffcdd2";
+      card.style.borderLeft = "6px solid #c94b4b";
     } else {
-      card.style.borderLeft = "5px solid #2c6ebd";
+      card.style.borderLeft = "6px solid #2c6ebd";
     }
 
-    const zoneColor = isSellSignal ? 'text-red-600' : (isBuySignal ? 'text-emerald-700' : 'text-blue-600');
+    const zoneColor = isSellSignal ? '#c94b4b' : (isBuySignal ? '#12614a' : '#2c6ebd');
+    const smallTextColor = (isBuySignal || isSellSignal) ? '#333333' : '#666666';
+
     const fun = getFundamentals(item.sym, item.last.close);
     const peDisp = fun.eps > 0 ? `${(item.last.close / fun.eps).toFixed(1)}x` : "N/A";
     const yieldDisp = `${((fun.dividend / item.last.close) * 100).toFixed(1)}%`;
 
     card.innerHTML = `
       <div>
-        <strong class="text-xs font-bold text-slate-900">${item.sym}</strong>
-        <span class="text-[10px] text-slate-500 ml-1.5">${item.name || getStockName(item.sym)}</span><br>
-        <small class="text-[10px] text-slate-400">價: ${formatPrice(item.last.close)} | PE: ${peDisp} | 殖利率: ${yieldDisp}</small>
+        <strong>${item.sym}</strong>${item.name ? `<span style="color:#555; font-size:0.85em; margin-left:6px;">${item.name}</span>` : ""}<br>
+        <small style="color:${smallTextColor}">現價: ${formatPrice(item.last.close)} | PE: ${peDisp} | 殖利率: ${yieldDisp}</small>
       </div>
-      <div class="text-right">
-        <span class="text-xs font-black ${zoneColor}">${priceZone(item.last)}</span><br>
-        <small class="text-[9px] text-slate-400">${item.last.r2.toFixed(2)} R²</small>
+      <div style="text-align:right;">
+        <span style="font-weight:900; color:${zoneColor}">${priceZone(item.last)}</span>
+        <br>
+        <small style="color:${smallTextColor}">區間: ${getPriceRangeDesc(item.last)}</small>
       </div>
     `;
 
@@ -639,60 +651,57 @@ function updateWatchlistDisplay() {
   });
 }
 
-btnExportWatchlist.addEventListener("click", (e) => {
-  e.preventDefault();
-  const currentText = watchlistInput.value.trim();
-  if (!currentText) {
-    watchlistStatus.textContent = "⚠️ 清單為空，無法匯出！";
-    return;
-  }
-  const tempTextArea = document.createElement("textarea");
-  tempTextArea.value = currentText;
-  document.body.appendChild(tempTextArea);
-  tempTextArea.select();
-  try {
-    document.execCommand('copy');
-    watchlistStatus.textContent = "📋 成功複製清單到剪貼簿！";
-  } catch (err) {
-    watchlistStatus.textContent = "❌ 複製失敗，請手動複製輸入框";
-  }
-  document.body.removeChild(tempTextArea);
-});
-
-btnImportWatchlist.addEventListener("click", (e) => {
-  e.preventDefault();
-  const userInput = prompt("請輸入先前匯出的股票代號（請用半形逗點隔開）：");
-  if (userInput === null) return;
-  const cleaned = userInput.trim();
-  if (!cleaned) {
-    watchlistStatus.textContent = "⚠️ 匯入欄位為空！";
-    return;
-  }
-  watchlistInput.value = cleaned;
-  localStorage.setItem("lohas_watchlist", cleaned);
-  watchlistStatus.textContent = "📥 成功匯入清單！";
-  updateRemoveSelect();
-  btnWatchlist.click();
-});
-
 btnClearWatchlist.addEventListener("click", () => {
   if (btnClearWatchlist.textContent.includes("全部清除")) {
     deletedWatchlistBackup = watchlistInput.value;
     watchlistInput.value = "";
     localStorage.removeItem("lohas_watchlist");
-    watchlistResult.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">清單已被清除</p>`;
+    watchlistResult.innerHTML = "";
     scannedWatchlistCache = [];
-    watchlistStatus.textContent = "🧹 已暫時清除清單！";
-    btnClearWatchlist.textContent = "↩️ 復原剛才清除";
+    watchlistStatus.textContent = "🧹 已暫時清除，可點擊按鈕復原";
+    
+    btnClearWatchlist.textContent = "↩️ 復原清除清單";
+    btnClearWatchlist.style.backgroundColor = "#d9852b"; 
   } else {
     if (deletedWatchlistBackup) {
       watchlistInput.value = deletedWatchlistBackup;
       localStorage.setItem("lohas_watchlist", deletedWatchlistBackup);
-      watchlistStatus.textContent = "↩️ 已成功回復歷史清單！";
+      watchlistStatus.textContent = "↩️ 已成功復原清單！";
     }
     btnClearWatchlist.textContent = "🧹 全部清除";
-    btnWatchlist.click();
+    btnClearWatchlist.style.backgroundColor = "#667085";
   }
+  updateRemoveSelect();
+});
+
+btnExportWatchlist.addEventListener("click", (e) => {
+  e.preventDefault();
+  const currentText = watchlistInput.value.trim();
+  if (!currentText) {
+    watchlistStatus.textContent = "⚠️ 目前清單是空的，無法匯出喔！";
+    return;
+  }
+  navigator.clipboard.writeText(currentText).then(() => {
+    watchlistStatus.textContent = "📋 清單已自動複製到剪貼簿！可貼至記事本備份。";
+  }).catch(() => {
+    watchlistStatus.textContent = "❌ 複製失敗，請手動複製輸入框文字。";
+  });
+});
+
+btnImportWatchlist.addEventListener("click", (e) => {
+  e.preventDefault();
+  const userInput = prompt("請貼上您先前匯出的股票代號（請用逗點隔開）：");
+  if (userInput === null) return;
+  const cleanedInput = userInput.trim();
+  if (!cleanedInput) {
+    alert("輸入內容為空，取消匯入。");
+    return;
+  }
+  watchlistInput.value = cleanedInput;
+  localStorage.setItem("lohas_watchlist", cleanedInput);
+  watchlistResult.innerHTML = "";
+  scannedWatchlistCache = [];
+  watchlistStatus.textContent = "📥 歷史清單匯入成功！點擊下方按鈕即可重新掃描。";
   updateRemoveSelect();
 });
 
@@ -702,12 +711,20 @@ fetchSymbolBtn.addEventListener("click", async () => {
   let selectedMarket = market.value;
 
   try {
-    const url = `/api/yahoo?symbol=${inputVal}&market=${selectedMarket}&years=${periodYears.value}`;
-    const res = await smartFetch(url);
-    const json = await res.json();
+    const p = new URLSearchParams({ 
+      symbol: inputVal, 
+      market: selectedMarket, 
+      years: periodYears.value 
+    });
     
+    const res = await fetch(`/api/yahoo?${p.toString()}`);
+    if (!res.ok) throw new Error();
+    const json = await res.json();
     csvInput.value = JSON.stringify(json.rows);
-    if (chartTitle) chartTitle.textContent = json.symbol;
+    
+    if (chartTitle) {
+      chartTitle.textContent = formatSymbolDisplay(json.symbol);
+    }
     
     render();
     fetchStatus.textContent = "成功";
@@ -715,30 +732,20 @@ fetchSymbolBtn.addEventListener("click", async () => {
     localStorage.setItem("lohas_last_market", selectedMarket);
   } catch (err) { 
     fetchStatus.textContent = "失敗"; 
+    console.error("Fetch 錯誤資訊:", err);
   }
 });
 
 document.querySelector("#sampleBtn").addEventListener("click", () => {
   const mock = []; 
-  let p = 150;
+  let p = 100;
   for(let i=0; i<300; i++) {
     mock.push({ 
       date: new Date(Date.now() - (300-i)*86400000).toISOString().split('T')[0], 
-      close: p += (Math.random()-0.485) * 5 
+      close: p += (Math.random()-0.48) 
     });
   }
   csvInput.value = JSON.stringify(mock);
-  if (chartTitle) chartTitle.textContent = "🎲 模擬隨機股價走勢";
+  if (chartTitle) chartTitle.textContent = "模擬範例股票";
   render();
 });
-
-// 初始化載入與事件監聽
-updateRemoveSelect();
-watchlistSearch.addEventListener("input", updateWatchlistDisplay);
-watchlistFilterZone.addEventListener("change", updateWatchlistDisplay);
-watchlistSort.addEventListener("change", updateWatchlistDisplay);
-
-setTimeout(() => {
-  document.querySelector("#sampleBtn").click();
-  btnWatchlist.click();
-}, 300);
