@@ -44,7 +44,6 @@ def normalize_yahoo_symbol(raw_symbol, market):
     sym = raw_symbol.strip().upper()
     if "." in sym:
         return sym
-    
     if re.match(r"^\d+$", sym):
         if market == "two":
             return f"{sym}.TWO"
@@ -57,6 +56,7 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
     except ValueError:
         years = 3.5
 
+    # 決定嘗試下載的代號優先順序
     sym = raw_symbol.strip().upper()
     symbols_to_try = []
 
@@ -70,17 +70,15 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
     else:
         symbols_to_try.append(sym)
 
+    # 依序發送請求嘗試取得歷史資料
     last_exception = None
     for yahoo_symbol in symbols_to_try:
         try:
             end_dt = date.today()
-            # 下載稍微多一點的數據，預留迴歸計算所需的歷史期
             start_dt = end_dt - timedelta(days=int((years + 0.6) * 365))
             period1 = int(time.mktime(start_dt.timetuple()))
             period2 = int(time.mktime(end_dt.timetuple()))
 
-            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?period1={period1}?period2={period2}&interval=1d"
-            # 💡 確保 URL 參數正確拼接
             url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?period1={period1}&period2={period2}&interval=1d"
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             
@@ -94,20 +92,33 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             result = chart_data[0]
             timestamps = result.get("timestamp", [])
             
-            # 💡 智慧還原股價處理：
-            # 優先讀取 adjclose (還原收盤價，已扣除配股配息缺口)，若不成功才降級讀取一般 close
-            adj_indicators = result.get("indicators", {}).get("adjclose", [{}])[0]
-            closes = adj_indicators.get("adjclose", [])
+            # 1. 取得一般未還原收盤價 (quote/close，即真實市場交易價格)
+            quote_indicators = result.get("indicators", {}).get("quote", [{}])[0]
+            raw_closes = quote_indicators.get("close", [])
             
-            if not closes or all(c is None for c in closes):
-                indicators = result.get("indicators", {}).get("quote", [{}])[0]
-                closes = indicators.get("close", [])
+            # 2. 取得還原收盤價 (adjclose/adjclose，回補歷年除權息影響)
+            adj_indicators = result.get("indicators", {}).get("adjclose", [{}])[0]
+            adj_closes = adj_indicators.get("adjclose", [])
+            
+            # 安全防呆備援
+            if not adj_closes:
+                adj_closes = raw_closes
+            if not raw_closes:
+                raw_closes = adj_closes
 
             rows = []
-            for t, c in zip(timestamps, closes):
-                if t is not None and c is not None:
-                    dt_str = date.fromtimestamp(t).isoformat()
-                    rows.append({"date": dt_str, "close": float(c)})
+            for t, rc, ac in zip(timestamps, raw_closes, adj_closes):
+                if t is not None:
+                    valid_adj = ac if ac is not None else rc
+                    valid_raw = rc if rc is not None else ac
+                    
+                    if valid_adj is not None and valid_raw is not None:
+                        dt_str = date.fromtimestamp(t).isoformat()
+                        rows.append({
+                            "date": dt_str,
+                            "close": float(valid_adj),       # 還原股價 (供樂活五線譜數學迴歸運算)
+                            "raw_close": float(valid_raw)   # 未還原即時市價 (真實交易價格)
+                        })
             
             if not rows:
                 raise ValueError("解析後無有效收盤價歷史紀錄")
@@ -139,7 +150,7 @@ class Handler(BaseHTTPRequestHandler):
             years = query.get("years", ["3.5"])[0]
             try:
                 actual_symbol, data = fetch_yahoo_symbol_with_retry(raw_symbol, market, years)
-                self.send_json(200, {"symbol": actual_symbol, "source": "Yahoo Finance (Adjusted)", "rows": data})
+                self.send_json(200, {"symbol": actual_symbol, "source": "Yahoo Finance", "rows": data})
             except Exception as exc:
                 self.send_json(400, {"error": str(exc)})
             return

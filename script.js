@@ -488,7 +488,7 @@ function render() {
       zoneText.textContent = priceZone(last);
       zoneText.style.color = (last.close >= last.plus2) ? "#c94b4b" : (last.close <= last.minus2 ? "#12614a" : "var(--ink)");
     }
-    if (closeText) closeText.textContent = formatPrice(last.close);
+	if (closeText) closeText.textContent = formatPrice(last.raw_close || last.close);
     if (r2Text) r2Text.textContent = last.r2.toFixed(3);
     if (rangeText) rangeText.textContent = getPriceRangeDesc(last);
     
