@@ -22,7 +22,7 @@ def month_range(start_date, end_date):
         if current.month == 12:
             current = date(current.year + 1, 1, 1)
         else:
-            current = date(current.year, current.month + 1, 1)
+            current = date(current.month + 1, 1, 1)
 
 def parse_twse_date(value):
     parts = value.split("/")
@@ -90,7 +90,7 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             result = chart_data[0]
             timestamps = result.get("timestamp", [])
             
-            # 💡 抓取 meta 欄位中的即時最新市價 (如 216.5)
+            # 💡 抓取 meta 欄位中的即時最新市價
             meta = result.get("meta", {})
             regular_market_price = meta.get("regularMarketPrice")
 
@@ -121,11 +121,15 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
                             "raw_close": float(valid_raw)   # 未還原歷史市價
                         })
             
-            # 💡 核心修正：如果 meta 裡面有最新的即時交易市價，強制更新最後一筆 raw_close 為即時價 (216.5)
+            # 💡 核心修正：將當天漲跌比例同步套用至還原價，完整保留歷年配息價值
             if rows and regular_market_price is not None:
-                latest_p = float(regular_market_price)
-                rows[-1]["raw_close"] = latest_p
-                rows[-1]["close"] = latest_p  # 讓今天最新的價格作為當天還原價基準
+                latest_raw = float(regular_market_price)
+                last_raw = rows[-1]["raw_close"]
+                
+                if last_raw > 0:
+                    ratio = latest_raw / last_raw
+                    rows[-1]["raw_close"] = latest_raw
+                    rows[-1]["close"] = round(rows[-1]["close"] * ratio, 2)
 
             if not rows:
                 raise ValueError("解析後無有效收盤價歷史紀錄")
@@ -144,7 +148,7 @@ class Handler(BaseHTTPRequestHandler):
         content = json.dumps(data).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
-        # 💡 強制停用 API 快取，避免瀏覽器一直讀到舊的 214.5 資料
+        # 強制停用 API 快取
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.send_header("Content-Length", str(len(content)))
         self.end_headers()
