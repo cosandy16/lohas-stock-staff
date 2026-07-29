@@ -56,7 +56,6 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
     except ValueError:
         years = 3.5
 
-    # 決定嘗試下載的代號優先順序
     sym = raw_symbol.strip().upper()
     symbols_to_try = []
 
@@ -70,7 +69,6 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
     else:
         symbols_to_try.append(sym)
 
-    # 依序發送請求嘗試取得歷史資料
     last_exception = None
     for yahoo_symbol in symbols_to_try:
         try:
@@ -92,15 +90,18 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             result = chart_data[0]
             timestamps = result.get("timestamp", [])
             
-            # 1. 取得一般未還原收盤價 (quote/close，即真實市場交易價格)
+            # 💡 抓取 meta 欄位中的即時最新市價 (如 216.5)
+            meta = result.get("meta", {})
+            regular_market_price = meta.get("regularMarketPrice")
+
+            # 1. 未還原收盤價歷史 (quote/close)
             quote_indicators = result.get("indicators", {}).get("quote", [{}])[0]
             raw_closes = quote_indicators.get("close", [])
             
-            # 2. 取得還原收盤價 (adjclose/adjclose，回補歷年除權息影響)
+            # 2. 還原收盤價歷史 (adjclose/adjclose)
             adj_indicators = result.get("indicators", {}).get("adjclose", [{}])[0]
             adj_closes = adj_indicators.get("adjclose", [])
             
-            # 安全防呆備援
             if not adj_closes:
                 adj_closes = raw_closes
             if not raw_closes:
@@ -116,10 +117,14 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
                         dt_str = date.fromtimestamp(t).isoformat()
                         rows.append({
                             "date": dt_str,
-                            "close": float(valid_adj),       # 還原股價 (供樂活五線譜數學迴歸運算)
-                            "raw_close": float(valid_raw)   # 未還原即時市價 (真實交易價格)
+                            "close": float(valid_adj),       # 還原價（供五線譜計算）
+                            "raw_close": float(valid_raw)   # 未還原歷史市價
                         })
             
+            # 💡 核心修正：如果 meta 裡面有最新的即時交易市價，強制更新最後一筆 raw_close 為即時價 (216.5)
+            if rows and regular_market_price is not None:
+                rows[-1]["raw_close"] = float(regular_market_price)
+
             if not rows:
                 raise ValueError("解析後無有效收盤價歷史紀錄")
                 
@@ -137,6 +142,8 @@ class Handler(BaseHTTPRequestHandler):
         content = json.dumps(data).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
+        # 💡 強制停用 API 快取，避免瀏覽器一直讀到舊的 214.5 資料
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.send_header("Content-Length", str(len(content)))
         self.end_headers()
         self.wfile.write(content)
