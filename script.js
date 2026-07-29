@@ -621,7 +621,7 @@ function updateWatchlistDisplay() {
     card.innerHTML = `
       <div>
         <strong>${item.sym}</strong>${item.name ? `<span style="color:#555; font-size:0.85em; margin-left:6px;">${item.name}</span>` : ""}<br>
-        <small style="color:${smallTextColor}">現價: ${formatPrice(item.last.raw_close || item.last.close)} | PE: ${peDisp} | 殖利率: ${yieldDisp}</small>
+        <small style="color:${smallTextColor}">現價: ${formatPrice(item.last.raw_close || item.last.close)} (還原: ${formatPrice(item.last.close)}) | PE: ${peDisp} | 殖利率: ${yieldDisp}</small>
       </div>
       <div style="text-align:right;">
         <span style="font-weight:900; color:${zoneColor}">${priceZone(item.last)}</span>
