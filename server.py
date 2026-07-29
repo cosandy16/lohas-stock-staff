@@ -123,7 +123,9 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             
             # 💡 核心修正：如果 meta 裡面有最新的即時交易市價，強制更新最後一筆 raw_close 為即時價 (216.5)
             if rows and regular_market_price is not None:
-                rows[-1]["raw_close"] = float(regular_market_price)
+                latest_p = float(regular_market_price)
+                rows[-1]["raw_close"] = latest_p
+                rows[-1]["close"] = latest_p  # 讓今天最新的價格作為當天還原價基準
 
             if not rows:
                 raise ValueError("解析後無有效收盤價歷史紀錄")
