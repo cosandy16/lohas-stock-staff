@@ -450,7 +450,7 @@ function renderChart(analysis) {
 
           chartTooltip.innerHTML = `
             <div class="title">${point.date}</div>
-            <div><span>收盤價:</span><strong>${formatPrice(point.close)}</strong></div>
+            <div><span>收盤價:</span><strong>${formatPrice(point.raw_close || point.close)}</strong></div>
             <div><span>本益比:</span><strong style="color:var(--blue);">${histPe}</strong></div>
             <div><span>估計殖利率:</span><strong style="color:var(--green);">${histYield}</strong></div>
             <div style="border-top:1px dashed rgba(255,255,255,0.15); margin-top:4px; padding-top:4px;"><span>+2SD 樂觀:</span><span>${formatPrice(point.plus2)}</span></div>
@@ -621,7 +621,7 @@ function updateWatchlistDisplay() {
     card.innerHTML = `
       <div>
         <strong>${item.sym}</strong>${item.name ? `<span style="color:#555; font-size:0.85em; margin-left:6px;">${item.name}</span>` : ""}<br>
-        <small style="color:${smallTextColor}">現價: ${formatPrice(item.last.close)} | PE: ${peDisp} | 殖利率: ${yieldDisp}</small>
+        <small style="color:${smallTextColor}">現價: ${formatPrice(item.last.raw_close || item.last.close)} | PE: ${peDisp} | 殖利率: ${yieldDisp}</small>
       </div>
       <div style="text-align:right;">
         <span style="font-weight:900; color:${zoneColor}">${priceZone(item.last)}</span>
