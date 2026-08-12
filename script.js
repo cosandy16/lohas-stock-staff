@@ -221,11 +221,10 @@ btnAddWatchlistSingle.addEventListener("click", async () => {
   updateRemoveSelect();
   watchlistStatus.textContent = `➕ 正在即時新增並計算 ${newSym}...`;
   
-  // 💡 智慧優化：不重跑整批！只單獨下載這檔新股票，並塞入快取
   try {
     const data = await fetchLevelForWatchlist(newSym);
-    scannedWatchlistCache.push(data); // 直接塞入現有的快取
-    updateWatchlistDisplay();        // 畫面瞬間刷新
+    scannedWatchlistCache.push(data);
+    updateWatchlistDisplay();
     watchlistStatus.textContent = `✅ 已成功新增 ${newSym}！`;
   } catch (err) {
     watchlistStatus.textContent = `❌ 即時新增 ${newSym} 失敗，請手動執行批量掃描。`;
@@ -488,7 +487,7 @@ function render() {
       zoneText.textContent = priceZone(last);
       zoneText.style.color = (last.close >= last.plus2) ? "#c94b4b" : (last.close <= last.minus2 ? "#12614a" : "var(--ink)");
     }
-	if (closeText) closeText.textContent = formatPrice(last.raw_close || last.close);
+    if (closeText) closeText.textContent = formatPrice(last.raw_close || last.close);
     if (r2Text) r2Text.textContent = last.r2.toFixed(3);
     if (rangeText) rangeText.textContent = getPriceRangeDesc(last);
     
@@ -510,18 +509,75 @@ function render() {
   }
 }
 
+// 💡 新增：主畫面顯示三大法人籌碼的渲染函式
+async function loadMainChipData(symbol) {
+  let chipEl = document.querySelector("#chipText");
+  if (!chipEl) {
+    if (yieldText && yieldText.parentElement) {
+      chipEl = document.createElement("div");
+      chipEl.id = "chipText";
+      chipEl.style.marginTop = "6px";
+      yieldText.parentElement.appendChild(chipEl);
+    } else {
+      return;
+    }
+  }
+
+  chipEl.innerHTML = `<span style="color:var(--muted); font-size:0.85em;">🔍 正在讀取三大法人籌碼...</span>`;
+
+  try {
+    const res = await fetch(`/api/chip?symbol=${encodeURIComponent(symbol)}`);
+    const chip = await res.json();
+    if (!chip || chip.error) {
+      chipEl.innerHTML = `<span style="color:#888; font-size:0.85em;">📊 三大法人: 尚無今日盤後資料/非台股標的</span>`;
+      return;
+    }
+
+    const fmt = (num) => {
+      const color = num > 0 ? "#c94b4b" : (num < 0 ? "#1f8a63" : "#666");
+      const sign = num > 0 ? "+" : "";
+      return `<span style="color:${color}; font-weight:bold;">${sign}${num.toLocaleString()} 張</span>`;
+    };
+
+    chipEl.innerHTML = `
+      <div style="font-size:0.85em; background:#f8fafc; padding:6px 12px; border-radius:8px; border:1px solid #e2e8f0; display:inline-block; margin-top:4px;">
+        <span style="color:#64748b;">📅 三大法人 (${chip.date}):</span> 
+        外資 ${fmt(chip.foreign)} | 投信 ${fmt(chip.trust)} | 自營 ${fmt(chip.dealer)} 
+        <span style="border-left:1px solid #cbd5e1; margin-left:6px; padding-left:6px;">合計 ${fmt(chip.total)}</span>
+      </div>
+    `;
+  } catch (e) {
+    chipEl.innerHTML = `<span style="color:#888; font-size:0.85em;">📊 三大法人: 讀取失敗</span>`;
+  }
+}
+
+// 💡 新增：同時抓取價格與籌碼
 async function fetchLevelForWatchlist(symbol) {
   let finalSym = symbol.trim().toUpperCase();
   if (!finalSym.includes(".") && /^\d+$/.test(finalSym)) finalSym += ".TW";
   const p = new URLSearchParams({ symbol: finalSym.replace(".TW","").replace(".TWO",""), market: finalSym.includes(".TWO") ? "two" : (finalSym.includes(".TW") ? "tw" : "us"), years: "3.5" });
+  
   const res = await fetch(`/api/yahoo?${p.toString()}`);
   if (!res.ok) throw new Error();
   const json = await res.json();
   const analysis = buildAnalysis(json.rows, "linear", "3.5");
+
+  // 💡 非同步抓取籌碼
+  let chip = null;
+  try {
+    const chipRes = await fetch(`/api/chip?symbol=${encodeURIComponent(finalSym)}`);
+    if (chipRes.ok) {
+      chip = await chipRes.json();
+    }
+  } catch (e) {
+    console.warn("籌碼抓取失敗", e);
+  }
+
   return { 
     sym: json.symbol, 
     last: analysis[analysis.length - 1], 
-    name: getStockName(json.symbol) 
+    name: getStockName(json.symbol),
+    chip: chip
   };
 }
 
@@ -539,7 +595,7 @@ btnWatchlist.addEventListener("click", async () => {
   let currentIndex = 0;
   for (const s of syms) {
     currentIndex++;
-    watchlistStatus.textContent = `🔍 正在掃描區間... (${currentIndex} / ${totalStocks})`;
+    watchlistStatus.textContent = `🔍 正在掃描區間與籌碼... (${currentIndex} / ${totalStocks})`;
 
     try {
       const data = await fetchLevelForWatchlist(s);
@@ -548,7 +604,7 @@ btnWatchlist.addEventListener("click", async () => {
     } catch {
       watchlistResult.innerHTML += `<div style="color:red; font-size:0.8rem; padding:8px;">❌ ${s} 失敗</div>`;
     }
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 400));
   }
   watchlistStatus.textContent = `✅ 掃描完成 (共 ${scannedWatchlistCache.length} 檔)`;
   btnWatchlist.disabled = false;
@@ -618,16 +674,32 @@ function updateWatchlistDisplay() {
     const peDisp = fun.eps > 0 ? `${(item.last.close / fun.eps).toFixed(1)}x` : "N/A";
     const yieldDisp = `${((fun.dividend / item.last.close) * 100).toFixed(1)}%`;
 
+    // 💡 籌碼卡片文字標籤
+    let chipHtml = "";
+    if (item.chip && !item.chip.error) {
+      const fmtChip = (n) => {
+        const c = n > 0 ? '#c94b4b' : (n < 0 ? '#1f8a63' : '#666');
+        const sign = n > 0 ? '+' : '';
+        return `<span style="color:${c}; font-weight:bold;">${sign}${n}</span>`;
+      };
+      chipHtml = `
+        <div style="font-size: 0.78em; color: #555; margin-top: 6px; padding-top: 4px; border-top: 1px dashed #cbd5e1;">
+          法人 (${item.chip.date.slice(5)}): 外資 ${fmtChip(item.chip.foreign)} | 投信 ${fmtChip(item.chip.trust)} | 合計 ${fmtChip(item.chip.total)} 張
+        </div>
+      `;
+    }
+
     card.innerHTML = `
       <div>
         <strong>${item.sym}</strong>${item.name ? `<span style="color:#555; font-size:0.85em; margin-left:6px;">${item.name}</span>` : ""}<br>
         <small style="color:${smallTextColor}; display: block; margin-top: 4px; line-height: 1.5;">
-		<span style="white-space: nowrap;">現價: ${formatPrice(item.last.raw_close || item.last.close)}</span> 
-		<span style="white-space: nowrap;">(還原: ${formatPrice(item.last.close)})</span>
-  <br>
-  <span style="white-space: nowrap;">PE: ${peDisp}</span> | 
-  <span style="white-space: nowrap;">殖利率: ${yieldDisp}</span>
-</small>
+          <span style="white-space: nowrap;">現價: ${formatPrice(item.last.raw_close || item.last.close)}</span> 
+          <span style="white-space: nowrap;">(還原: ${formatPrice(item.last.close)})</span>
+          <br>
+          <span style="white-space: nowrap;">PE: ${peDisp}</span> | 
+          <span style="white-space: nowrap;">殖利率: ${yieldDisp}</span>
+        </small>
+        ${chipHtml}
       </div>
       <div style="text-align:right;">
         <span style="font-weight:900; color:${zoneColor}">${priceZone(item.last)}</span>
@@ -732,6 +804,9 @@ fetchSymbolBtn.addEventListener("click", async () => {
       chartTitle.textContent = formatSymbolDisplay(json.symbol);
     }
     
+    // 💡 讀取主視覺的三大法人籌碼數據
+    loadMainChipData(inputVal);
+
     render();
     fetchStatus.textContent = "成功";
     localStorage.setItem("lohas_last_symbol", inputVal);
