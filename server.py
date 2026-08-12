@@ -1,20 +1,24 @@
+import datetime
 import json
 import mimetypes
 import os
 import re
+import ssl
 import time
 import urllib.parse
 import urllib.request
 from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.error import HTTPError
-import datetime
-import time
 
 ROOT = Path(__file__).resolve().parent
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8769"))
+
+# 建立免驗證 SSL Context (防止 Python 存取政府 OpenData 時因為系統憑證缺失而報錯)
+ssl_ctx = ssl.create_default_context()
+ssl_ctx.check_hostname = False
+ssl_ctx.verify_mode = ssl.CERT_NONE
 
 
 def month_range(start_date, end_date):
@@ -38,12 +42,21 @@ def parse_twse_date(value):
 
 def parse_number(value):
     cleaned = str(value).replace(",", "").strip()
-    if cleaned in {"", "--", "X", "除權息"}:
+    if cleaned in {"", "--", "X", "除權息", "None", "null"}:
         return None
     try:
         return float(cleaned)
     except ValueError:
         return None
+
+
+def parse_num_to_sheets(val):
+    """把數字轉為整數「張數」（自動將股數除以 1000 換算）"""
+    n = parse_number(val)
+    if n is None:
+        return 0
+    # 若絕對值 >= 500，代表單位是「股」，除以 1000 換算為「張」
+    return int(round(n / 1000.0)) if abs(n) >= 500 else int(round(n))
 
 
 def normalize_yahoo_symbol(raw_symbol, market):
@@ -58,150 +71,144 @@ def normalize_yahoo_symbol(raw_symbol, market):
 
 
 # ---------------------------------------------------------
-# 💡 新增：三大法人籌碼抓取 logic (支援上市 TWSE & 上櫃 TPEx)
+# 💡 升級版：三大法人籌碼抓取 (OpenData 官方免封鎖 API)
 # ---------------------------------------------------------
-def fetch_twse_chip(symbol_code, target_date):
-    """從證交所 API (TWSE) 抓取上市股票籌碼"""
-    date_str = target_date.strftime("%Y%m%d")
-    url = f"https://www.twse.com.tw/rwd/zh/fund/T86?response=json&date={date_str}&selectType=ALLBUT0999"
+def fetch_twse_openapi(symbol_code):
+    """【上市股票】直接存取 TWSE 官方 OpenData API (不被擋 IP，穩定快速)"""
+    url = "https://openapi.twse.com.tw/v1/fund/T86Daily"
     req = urllib.request.Request(
-        url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Accept": "application/json",
+        },
     )
     try:
-        with urllib.request.urlopen(req, timeout=4) as response:
-            res_data = json.loads(response.read().decode("utf-8"))
-        if res_data.get("stat") == "OK" and "data" in res_data:
-            fields = res_data.get("fields", [])
-            field_map = {f.strip(): idx for idx, f in enumerate(fields)}
-
-            for row in res_data["data"]:
-                if row[0].strip() == symbol_code:
-
-                    def get_num(keywords):
-                        for kw in keywords:
-                            for f_name, idx in field_map.items():
-                                if kw in f_name:
-                                    val = parse_number(str(row[idx]))
-                                    if val is not None:
-                                        return int(round(val / 1000.0))
-                        return 0
-
-                    foreign = get_num(
-                        [
-                            "外陸資買賣超股數(不含外資自營商)",
-                            "外陸資買賣超股數",
-                            "外資買賣超",
-                        ]
+        with urllib.request.urlopen(req, timeout=6, context=ssl_ctx) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            for item in data:
+                code = str(
+                    item.get("Code", "") or item.get("SecuritiesCode", "")
+                ).strip()
+                if code == symbol_code:
+                    foreign = parse_num_to_sheets(
+                        item.get("ForeignInvestorsBuySell", 0)
                     )
-                    trust = get_num(["投信買賣超股數"])
-                    dealer = get_num(["自營商買賣超股數(合計)", "自營商買賣超股數"])
-                    total = get_num(["三大法人買賣超股數合計", "三大法人買賣超股數"])
+                    trust = parse_num_to_sheets(
+                        item.get("InvestmentTrustBuySell", 0)
+                    )
+                    dealer = parse_num_to_sheets(
+                        item.get("DealerBuySell", 0)
+                    )
+                    total = parse_num_to_sheets(
+                        item.get("TotalDifference", 0)
+                    )
 
                     if total == 0 and (
                         foreign != 0 or trust != 0 or dealer != 0
                     ):
                         total = foreign + trust + dealer
 
+                    date_raw = str(item.get("Date", ""))
+                    if len(date_raw) == 8:
+                        formatted_date = f"{date_raw[:4]}-{date_raw[4:6]}-{date_raw[6:]}"
+                    else:
+                        formatted_date = (
+                            datetime.date.today().strftime("%Y-%m-%d")
+                        )
+
                     return {
-                        "date": f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}",
+                        "date": formatted_date,
                         "foreign": foreign,
                         "trust": trust,
                         "dealer": dealer,
                         "total": total,
                     }
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"💡 TWSE OpenData 存取跳過: {e}")
     return None
 
 
-def fetch_tpex_chip(symbol_code, target_date):
-    """從櫃買中心 API (TPEx) 抓取上櫃股票籌碼"""
-    roc_year = target_date.year - 1911
-    roc_date_str = f"{roc_year}/{target_date.month:02d}/{target_date.day:02d}"
-    url = f"https://www.tpex.org.tw/web/stock/33insti/daily_trade/33itrade_hedge_result.php?l=zh-tw&o=json&se=EW&t=D&d={roc_date_str}&s=0,asc"
+def fetch_tpex_openapi(symbol_code):
+    """【上櫃股票】直接存取 TPEx 櫃買中心 OpenData API"""
+    url = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_trading_institutional_investors"
     req = urllib.request.Request(
-        url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Accept": "application/json",
+        },
     )
     try:
-        with urllib.request.urlopen(req, timeout=4) as response:
-            res_data = json.loads(response.read().decode("utf-8"))
+        with urllib.request.urlopen(req, timeout=6, context=ssl_ctx) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            for item in data:
+                code = str(
+                    item.get("SecuritiesCompanyCode", "")
+                    or item.get("Code", "")
+                    or item.get("SecuritiesCode", "")
+                ).strip()
 
-        aaData = res_data.get("aaData", [])
-        for row in aaData:
-            if len(row) > 1 and row[0].strip() == symbol_code:
+                if code == symbol_code:
+                    foreign = parse_num_to_sheets(
+                        item.get("ForeignInvestorBuySell", 0)
+                    )
+                    trust = parse_num_to_sheets(
+                        item.get("InvestmentTrustBuySell", 0)
+                    )
+                    dealer = parse_num_to_sheets(
+                        item.get("DealerBuySell", 0)
+                    )
+                    total = parse_num_to_sheets(
+                        item.get("TotalBuySell", 0)
+                    )
 
-                def p_val(idx):
-                    if idx < len(row):
-                        v = parse_number(str(row[idx]))
-                        if v is not None:
-                            return (
-                                int(round(v / 1000.0))
-                                if abs(v) > 500
-                                else int(round(v))
-                            )
-                    return 0
+                    if total == 0 and (
+                        foreign != 0 or trust != 0 or dealer != 0
+                    ):
+                        total = foreign + trust + dealer
 
-                foreign = p_val(10)
-                trust = p_val(13)
-                dealer = p_val(22)
-                total = (
-                    p_val(23)
-                    if len(row) > 23
-                    else (foreign + trust + dealer)
-                )
-
-                return {
-                    "date": target_date.strftime("%Y-%m-%d"),
-                    "foreign": foreign,
-                    "trust": trust,
-                    "dealer": dealer,
-                    "total": total,
-                }
-    except Exception:
-        pass
+                    date_raw = str(item.get("Date", ""))
+                    return {
+                        "date": date_raw or "最近交易日",
+                        "foreign": foreign,
+                        "trust": trust,
+                        "dealer": dealer,
+                        "total": total,
+                    }
+    except Exception as e:
+        print(f"💡 TPEx OpenData 存取跳過: {e}")
     return None
 
 
 def fetch_chip_data(raw_symbol):
-    """智慧抓取籌碼：若今天未公布，自動遞補抓取最近一個有效交易日 (如昨天/上週五)"""
+    """三大法人籌碼總入口 (自動判別上市/上櫃，永久解決抓不到資料的問題)"""
     symbol_code = raw_symbol.split(".")[0].strip().upper()
-    now = datetime.datetime.now()
-    today = now.date()
+    print(f"📡 正在查詢 [{symbol_code}] 最新三大法人盤後籌碼...")
 
-    # 💡 智慧時間判斷：
-    # 台灣證交所每日籌碼約 15:00 ~ 15:30 陸續公布
-    # 若在 15:00 前查詢，代表「今天」一定還沒出，直接從「昨天 (offset=1)」開始找，避免被封鎖 IP
-    start_offset = 0 if now.hour >= 15 else 1
+    # 1. 優先嘗試 TWSE 上市股票 OpenData
+    res = fetch_twse_openapi(symbol_code)
+    if res:
+        print(
+            f"✅ [上市成功] {symbol_code} ({res['date']}): 外資 {res['foreign']}張 | 投信 {res['trust']}張 | 三大法人 {res['total']}張"
+        )
+        return res
 
-    # 往回尋找最近 7 天內的有效交易日
-    for i in range(start_offset, start_offset + 7):
-        target_date = today - timedelta(days=i)
+    # 2. 嘗試 TPEx 上櫃股票 OpenData
+    res = fetch_tpex_openapi(symbol_code)
+    if res:
+        print(
+            f"✅ [上櫃成功] {symbol_code} ({res['date']}): 外資 {res['foreign']}張 | 投信 {res['trust']}張 | 三大法人 {res['total']}張"
+        )
+        return res
 
-        # 自動跳過週末 (週六=5, 週日=6)
-        if target_date.weekday() >= 5:
-            continue
-
-        date_str = target_date.strftime("%Y-%m-%d")
-        print(f"🔍 正在嘗試讀取 {symbol_code} 在 [{date_str}] 的籌碼資料...")
-
-        # 1. 先試上市 (TWSE)
-        res = fetch_twse_chip(symbol_code, target_date)
-        if res:
-            print(f"✅ 成功取得上市籌碼：{date_str}")
-            return res
-
-        # 2. 再試上櫃 (TPEx)
-        res = fetch_tpex_chip(symbol_code, target_date)
-        if res:
-            print(f"✅ 成功取得上櫃籌碼：{date_str}")
-            return res
-
-        # 💡 防封鎖機制：每次切換日期查詢間隔 0.3 秒
-        time.sleep(0.3)
-
+    print(f"❌ [{symbol_code}] 未查獲籌碼資料 (可能非台股標的或代碼錯誤)")
     return None
 
 
+# ---------------------------------------------------------
+# Yahoo Finance 歷史股價抓取 logic
+# ---------------------------------------------------------
 def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
     try:
         years = float(years_str)
@@ -231,10 +238,13 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
 
             url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?period1={period1}&period2={period2}&interval=1d"
             req = urllib.request.Request(
-                url, headers={"User-Agent": "Mozilla/5.0"}
+                url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                },
             )
 
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req, context=ssl_ctx) as response:
                 res_data = json.loads(response.read().decode("utf-8"))
 
             chart_data = res_data.get("chart", {}).get("result", [])
@@ -305,9 +315,9 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
 class Handler(BaseHTTPRequestHandler):
 
     def send_json(self, status, data):
-        content = json.dumps(data).encode("utf-8")
+        content = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header(
             "Cache-Control", "no-cache, no-store, must-revalidate"
         )
@@ -340,7 +350,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(400, {"error": str(exc)})
             return
 
-        # 2. 💡 新增：三大法人籌碼 API
+        # 2. 三大法人籌碼 API
         if parsed.path == "/api/chip":
             query = urllib.parse.parse_qs(parsed.query)
             raw_symbol = query.get("symbol", [""])[0]
@@ -376,7 +386,7 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     server = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"LOHAS Stock Staff Server started at http://{HOST}:{PORT}")
+    print(f"🚀 LOHAS Stock Server Started at http://{HOST}:{PORT}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
