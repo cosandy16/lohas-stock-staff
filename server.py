@@ -15,29 +15,10 @@ ROOT = Path(__file__).resolve().parent
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8769"))
 
-# 建立免驗證 SSL Context (防止 Python 存取政府 OpenData 時因為系統憑證缺失而報錯)
+# 建立免驗證 SSL Context (避免 Render 的 Linux 環境存取政府/外部 API 時因憑證缺失報錯)
 ssl_ctx = ssl.create_default_context()
 ssl_ctx.check_hostname = False
 ssl_ctx.verify_mode = ssl.CERT_NONE
-
-
-def month_range(start_date, end_date):
-    current = date(start_date.year, start_date.month, 1)
-    last = date(end_date.year, end_date.month, 1)
-    while current <= last:
-        yield current
-        if current.month == 12:
-            current = date(current.year + 1, 1, 1)
-        else:
-            current = date(current.month + 1, 1, 1)
-
-
-def parse_twse_date(value):
-    parts = value.split("/")
-    if len(parts) != 3:
-        raise ValueError(f"Invalid TWSE date: {value}")
-    year = int(parts[0]) + 1911
-    return f"{year:04d}-{int(parts[1]):02d}-{int(parts[2]):02d}"
 
 
 def parse_number(value):
@@ -55,27 +36,18 @@ def parse_num_to_sheets(val):
     n = parse_number(val)
     if n is None:
         return 0
-    # 若絕對值 >= 500，代表單位是「股」，除以 1000 換算為「張」
     return int(round(n / 1000.0)) if abs(n) >= 500 else int(round(n))
 
 
-def normalize_yahoo_symbol(raw_symbol, market):
-    sym = raw_symbol.strip().upper()
-    if "." in sym:
-        return sym
-    if re.match(r"^\d+$", sym):
-        if market == "two":
-            return f"{sym}.TWO"
-        return f"{sym}.TW"
-    return sym
-
-
 # ---------------------------------------------------------
-# 💡 升級版：三大法人籌碼抓取 (OpenData 官方免封鎖 API)
+# 🌐 FinMind API：專為 Render / 國外雲端主機設計 (免擋 IP)
 # ---------------------------------------------------------
-def fetch_twse_openapi(symbol_code):
-    """【上市股票】直接存取 TWSE 官方 OpenData API (不被擋 IP，穩定快速)"""
-    url = "https://openapi.twse.com.tw/v1/fund/T86Daily"
+def fetch_finmind_chip(symbol_code):
+    """從 FinMind API 讀取三大法人籌碼 (不封鎖 Render Overseas IP)"""
+    today = datetime.date.today()
+    start_date = (today - datetime.timedelta(days=10)).strftime("%Y-%m-%d")
+    url = f"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInstitutionalInvestorsBuySell&data_id={symbol_code}&start_date={start_date}"
+
     req = urllib.request.Request(
         url,
         headers={
@@ -83,8 +55,70 @@ def fetch_twse_openapi(symbol_code):
             "Accept": "application/json",
         },
     )
+
     try:
-        with urllib.request.urlopen(req, timeout=6, context=ssl_ctx) as resp:
+        with urllib.request.urlopen(req, timeout=8, context=ssl_ctx) as resp:
+            res_data = json.loads(resp.read().decode("utf-8"))
+
+        data_list = res_data.get("data", [])
+        if not data_list:
+            return None
+
+        # 依日期彙整三大法人買賣超 (單位為股)
+        by_date = {}
+        for row in data_list:
+            d = row.get("date")
+            name = str(row.get("name", ""))
+            buy = row.get("buy", 0) or 0
+            sell = row.get("sell", 0) or 0
+            diff = buy - sell
+
+            if d not in by_date:
+                by_date[d] = {
+                    "foreign": 0,
+                    "trust": 0,
+                    "dealer": 0,
+                    "total": 0,
+                }
+
+            if "Foreign" in name or "外資" in name:
+                by_date[d]["foreign"] += diff
+            elif "Trust" in name or "投信" in name:
+                by_date[d]["trust"] += diff
+            elif "Dealer" in name or "自營" in name:
+                by_date[d]["dealer"] += diff
+
+            by_date[d]["total"] += diff
+
+        if not by_date:
+            return None
+
+        # 取得最新的交易日籌碼
+        latest_date = sorted(by_date.keys())[-1]
+        chip = by_date[latest_date]
+
+        return {
+            "date": latest_date,
+            "foreign": int(round(chip["foreign"] / 1000.0)),
+            "trust": int(round(chip["trust"] / 1000.0)),
+            "dealer": int(round(chip["dealer"] / 1000.0)),
+            "total": int(round(chip["total"] / 1000.0)),
+        }
+    except Exception as e:
+        print(f"⚠️ FinMind API 擷取失敗: {e}")
+    return None
+
+
+# ---------------------------------------------------------
+# 🏛️ TWSE / TPEx OpenData API (備援)
+# ---------------------------------------------------------
+def fetch_twse_openapi(symbol_code):
+    url = "https://openapi.twse.com.tw/v1/fund/T86Daily"
+    req = urllib.request.Request(
+        url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5, context=ssl_ctx) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             for item in data:
                 code = str(
@@ -97,12 +131,8 @@ def fetch_twse_openapi(symbol_code):
                     trust = parse_num_to_sheets(
                         item.get("InvestmentTrustBuySell", 0)
                     )
-                    dealer = parse_num_to_sheets(
-                        item.get("DealerBuySell", 0)
-                    )
-                    total = parse_num_to_sheets(
-                        item.get("TotalDifference", 0)
-                    )
+                    dealer = parse_num_to_sheets(item.get("DealerBuySell", 0))
+                    total = parse_num_to_sheets(item.get("TotalDifference", 0))
 
                     if total == 0 and (
                         foreign != 0 or trust != 0 or dealer != 0
@@ -110,12 +140,11 @@ def fetch_twse_openapi(symbol_code):
                         total = foreign + trust + dealer
 
                     date_raw = str(item.get("Date", ""))
-                    if len(date_raw) == 8:
-                        formatted_date = f"{date_raw[:4]}-{date_raw[4:6]}-{date_raw[6:]}"
-                    else:
-                        formatted_date = (
-                            datetime.date.today().strftime("%Y-%m-%d")
-                        )
+                    formatted_date = (
+                        f"{date_raw[:4]}-{date_raw[4:6]}-{date_raw[6:]}"
+                        if len(date_raw) == 8
+                        else datetime.date.today().strftime("%Y-%m-%d")
+                    )
 
                     return {
                         "date": formatted_date,
@@ -125,89 +154,37 @@ def fetch_twse_openapi(symbol_code):
                         "total": total,
                     }
     except Exception as e:
-        print(f"💡 TWSE OpenData 存取跳過: {e}")
-    return None
-
-
-def fetch_tpex_openapi(symbol_code):
-    """【上櫃股票】直接存取 TPEx 櫃買中心 OpenData API"""
-    url = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_trading_institutional_investors"
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            "Accept": "application/json",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=6, context=ssl_ctx) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            for item in data:
-                code = str(
-                    item.get("SecuritiesCompanyCode", "")
-                    or item.get("Code", "")
-                    or item.get("SecuritiesCode", "")
-                ).strip()
-
-                if code == symbol_code:
-                    foreign = parse_num_to_sheets(
-                        item.get("ForeignInvestorBuySell", 0)
-                    )
-                    trust = parse_num_to_sheets(
-                        item.get("InvestmentTrustBuySell", 0)
-                    )
-                    dealer = parse_num_to_sheets(
-                        item.get("DealerBuySell", 0)
-                    )
-                    total = parse_num_to_sheets(
-                        item.get("TotalBuySell", 0)
-                    )
-
-                    if total == 0 and (
-                        foreign != 0 or trust != 0 or dealer != 0
-                    ):
-                        total = foreign + trust + dealer
-
-                    date_raw = str(item.get("Date", ""))
-                    return {
-                        "date": date_raw or "最近交易日",
-                        "foreign": foreign,
-                        "trust": trust,
-                        "dealer": dealer,
-                        "total": total,
-                    }
-    except Exception as e:
-        print(f"💡 TPEx OpenData 存取跳過: {e}")
+        print(f"💡 TWSE OpenData 跳過: {e}")
     return None
 
 
 def fetch_chip_data(raw_symbol):
-    """三大法人籌碼總入口 (自動判別上市/上櫃，永久解決抓不到資料的問題)"""
+    """三大法人籌碼總入口 (雙軌備援，適應 Render 雲端環境)"""
     symbol_code = raw_symbol.split(".")[0].strip().upper()
-    print(f"📡 正在查詢 [{symbol_code}] 最新三大法人盤後籌碼...")
+    print(f"📡 [Render Cloud] 正在查詢 [{symbol_code}] 最新三大法人盤後籌碼...")
 
-    # 1. 優先嘗試 TWSE 上市股票 OpenData
+    # 1. 首選：FinMind API (對 Render 等海外雲端 IP 極度友善)
+    res = fetch_finmind_chip(symbol_code)
+    if res:
+        print(
+            f"✅ [FinMind 成功] {symbol_code} ({res['date']}): 外資 {res['foreign']}張 | 投信 {res['trust']}張 | 三大法人 {res['total']}張"
+        )
+        return res
+
+    # 2. 備援：TWSE 官方 OpenData
     res = fetch_twse_openapi(symbol_code)
     if res:
         print(
-            f"✅ [上市成功] {symbol_code} ({res['date']}): 外資 {res['foreign']}張 | 投信 {res['trust']}張 | 三大法人 {res['total']}張"
+            f"✅ [TWSE OpenData 成功] {symbol_code} ({res['date']}): 外資 {res['foreign']}張 | 投信 {res['trust']}張 | 三大法人 {res['total']}張"
         )
         return res
 
-    # 2. 嘗試 TPEx 上櫃股票 OpenData
-    res = fetch_tpex_openapi(symbol_code)
-    if res:
-        print(
-            f"✅ [上櫃成功] {symbol_code} ({res['date']}): 外資 {res['foreign']}張 | 投信 {res['trust']}張 | 三大法人 {res['total']}張"
-        )
-        return res
-
-    print(f"❌ [{symbol_code}] 未查獲籌碼資料 (可能非台股標的或代碼錯誤)")
+    print(f"❌ [{symbol_code}] 無法取得籌碼資料 (可能非台股或已被防火牆阻擋)")
     return None
 
 
 # ---------------------------------------------------------
-# Yahoo Finance 歷史股價抓取 logic
+# Yahoo Finance 歷史股價抓取
 # ---------------------------------------------------------
 def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
     try:
@@ -244,7 +221,9 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
                 },
             )
 
-            with urllib.request.urlopen(req, context=ssl_ctx) as response:
+            with urllib.request.urlopen(
+                req, timeout=10, context=ssl_ctx
+            ) as response:
                 res_data = json.loads(response.read().decode("utf-8"))
 
             chart_data = res_data.get("chart", {}).get("result", [])
@@ -386,7 +365,7 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     server = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"🚀 LOHAS Stock Server Started at http://{HOST}:{PORT}")
+    print(f"🚀 Render Cloud Stock Server Started on Port {PORT}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
