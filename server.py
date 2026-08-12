@@ -9,6 +9,8 @@ from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError
+import datetime
+import time
 
 ROOT = Path(__file__).resolve().parent
 HOST = os.environ.get("HOST", "0.0.0.0")
@@ -161,25 +163,41 @@ def fetch_tpex_chip(symbol_code, target_date):
 
 
 def fetch_chip_data(raw_symbol):
-    """自動推算最近交易日並搜尋上市或上櫃籌碼"""
+    """智慧抓取籌碼：若今天未公布，自動遞補抓取最近一個有效交易日 (如昨天/上週五)"""
     symbol_code = raw_symbol.split(".")[0].strip().upper()
-    today = date.today()
+    now = datetime.datetime.now()
+    today = now.date()
 
-    # 自動往前尋找最近 7 天內有發布籌碼的交易日
-    for i in range(7):
+    # 💡 智慧時間判斷：
+    # 台灣證交所每日籌碼約 15:00 ~ 15:30 陸續公布
+    # 若在 15:00 前查詢，代表「今天」一定還沒出，直接從「昨天 (offset=1)」開始找，避免被封鎖 IP
+    start_offset = 0 if now.hour >= 15 else 1
+
+    # 往回尋找最近 7 天內的有效交易日
+    for i in range(start_offset, start_offset + 7):
         target_date = today - timedelta(days=i)
-        if target_date.weekday() >= 5:  # 跳過週末
+
+        # 自動跳過週末 (週六=5, 週日=6)
+        if target_date.weekday() >= 5:
             continue
+
+        date_str = target_date.strftime("%Y-%m-%d")
+        print(f"🔍 正在嘗試讀取 {symbol_code} 在 [{date_str}] 的籌碼資料...")
 
         # 1. 先試上市 (TWSE)
         res = fetch_twse_chip(symbol_code, target_date)
         if res:
+            print(f"✅ 成功取得上市籌碼：{date_str}")
             return res
 
         # 2. 再試上櫃 (TPEx)
         res = fetch_tpex_chip(symbol_code, target_date)
         if res:
+            print(f"✅ 成功取得上櫃籌碼：{date_str}")
             return res
+
+        # 💡 防封鎖機制：每次切換日期查詢間隔 0.3 秒
+        time.sleep(0.3)
 
     return None
 
