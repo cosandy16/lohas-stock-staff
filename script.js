@@ -554,7 +554,7 @@ async function loadMainChipData(symbol) {
   }
 }
 
-// 💡 同時抓取價格與籌碼
+// 💡 監控清單專用價格計算（不抓取籌碼以提升快掃速度）
 async function fetchLevelForWatchlist(symbol) {
   let finalSym = symbol.trim().toUpperCase();
   if (!finalSym.includes(".") && /^\d+$/.test(finalSym)) finalSym += ".TW";
@@ -565,21 +565,10 @@ async function fetchLevelForWatchlist(symbol) {
   const json = await res.json();
   const analysis = buildAnalysis(json.rows, "linear", "3.5");
 
-  let chip = null;
-  try {
-    const chipRes = await fetch(`/api/chip?symbol=${encodeURIComponent(finalSym)}`);
-    if (chipRes.ok) {
-      chip = await chipRes.json();
-    }
-  } catch (e) {
-    console.warn("籌碼抓取失敗", e);
-  }
-
   return { 
     sym: json.symbol, 
     last: analysis[analysis.length - 1], 
-    name: getStockName(json.symbol),
-    chip: chip
+    name: getStockName(json.symbol)
   };
 }
 
@@ -597,7 +586,7 @@ btnWatchlist.addEventListener("click", async () => {
   let currentIndex = 0;
   for (const s of syms) {
     currentIndex++;
-    watchlistStatus.textContent = `🔍 正在掃描區間與籌碼... (${currentIndex} / ${totalStocks})`;
+    watchlistStatus.textContent = `🔍 正在掃描樂活通道區間... (${currentIndex} / ${totalStocks})`;
 
     try {
       const data = await fetchLevelForWatchlist(s);
@@ -606,7 +595,7 @@ btnWatchlist.addEventListener("click", async () => {
     } catch {
       watchlistResult.innerHTML += `<div style="color:red; font-size:0.8rem; padding:8px;">❌ ${s} 失敗</div>`;
     }
-    await new Promise(r => setTimeout(r, 400));
+    await new Promise(r => setTimeout(r, 200));
   }
   watchlistStatus.textContent = `✅ 掃描完成 (共 ${scannedWatchlistCache.length} 檔)`;
   btnWatchlist.disabled = false;
@@ -676,20 +665,7 @@ function updateWatchlistDisplay() {
     const peDisp = fun.eps > 0 ? `${(item.last.close / fun.eps).toFixed(1)}x` : "N/A";
     const yieldDisp = `${((fun.dividend / item.last.close) * 100).toFixed(1)}%`;
 
-    let chipHtml = "";
-    if (item.chip && !item.chip.error) {
-      const fmtChip = (n) => {
-        const c = n > 0 ? '#c94b4b' : (n < 0 ? '#1f8a63' : '#666');
-        const sign = n > 0 ? '+' : '';
-        return `<span style="color:${c}; font-weight:bold;">${sign}${(n || 0).toLocaleString()}</span>`;
-      };
-      chipHtml = `
-        <div style="font-size: 0.78em; color: #555; margin-top: 6px; padding-top: 4px; border-top: 1px dashed #cbd5e1;">
-          法人 (${item.chip.date.slice(5)}): 外資 ${fmtChip(item.chip.foreign)} | 投信 ${fmtChip(item.chip.trust)} | 合計 ${fmtChip(item.chip.total)} 張
-        </div>
-      `;
-    }
-
+    // 💡 已移除監控卡片底部的法人籌碼列，保持卡片簡潔清爽
     card.innerHTML = `
       <div>
         <strong>${item.sym}</strong>${item.name ? `<span style="color:#555; font-size:0.85em; margin-left:6px;">${item.name}</span>` : ""}<br>
@@ -700,7 +676,6 @@ function updateWatchlistDisplay() {
           <span style="white-space: nowrap;">PE: ${peDisp}</span> | 
           <span style="white-space: nowrap;">殖利率: ${yieldDisp}</span>
         </small>
-        ${chipHtml}
       </div>
       <div style="text-align:right;">
         <span style="font-weight:900; color:${zoneColor}">${priceZone(item.last)}</span>
