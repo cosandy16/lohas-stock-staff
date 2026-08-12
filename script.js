@@ -509,19 +509,10 @@ function render() {
   }
 }
 
-// 💡 新增：主畫面顯示三大法人籌碼的渲染函式
+// 💡 主畫面顯示三大法人籌碼（帶懸浮買賣明細 Tooltip）
 async function loadMainChipData(symbol) {
-  let chipEl = document.querySelector("#chipText");
-  if (!chipEl) {
-    if (yieldText && yieldText.parentElement) {
-      chipEl = document.createElement("div");
-      chipEl.id = "chipText";
-      chipEl.style.marginTop = "6px";
-      yieldText.parentElement.appendChild(chipEl);
-    } else {
-      return;
-    }
-  }
+  const chipEl = document.querySelector("#chipText");
+  if (!chipEl) return;
 
   chipEl.innerHTML = `<span style="color:var(--muted); font-size:0.85em;">🔍 正在讀取三大法人籌碼...</span>`;
 
@@ -529,29 +520,41 @@ async function loadMainChipData(symbol) {
     const res = await fetch(`/api/chip?symbol=${encodeURIComponent(symbol)}`);
     const chip = await res.json();
     if (!chip || chip.error) {
-      chipEl.innerHTML = `<span style="color:#888; font-size:0.85em;">📊 三大法人: 尚無今日盤後資料/非台股標的</span>`;
+      chipEl.innerHTML = `<span style="color:var(--muted); font-size:0.85em;">尚無今日盤後籌碼資料或非台股標的</span>`;
       return;
     }
 
-    const fmt = (num) => {
-      const color = num > 0 ? "#c94b4b" : (num < 0 ? "#1f8a63" : "#666");
+    const fmtDiff = (num) => {
+      const color = num > 0 ? "#c94b4b" : (num < 0 ? "#1f8a63" : "inherit");
       const sign = num > 0 ? "+" : "";
-      return `<span style="color:${color}; font-weight:bold;">${sign}${num.toLocaleString()} 張</span>`;
+      return `<strong style="color:${color};">${sign}${(num || 0).toLocaleString()}</strong>`;
     };
+    const fmtVal = (num) => (num || 0).toLocaleString();
+
+    const fBuy = chip.foreign_buy || 0;
+    const fSell = chip.foreign_sell || 0;
+    const tBuy = chip.trust_buy || 0;
+    const tSell = chip.trust_sell || 0;
+    const dBuy = chip.dealer_buy || 0;
+    const dSell = chip.dealer_sell || 0;
+
+    const foreignTip = (fBuy || fSell) ? `<span class="tooltiptext">買進 ${fmtVal(fBuy)} | 賣出 ${fmtVal(fSell)}</span>` : "";
+    const trustTip = (tBuy || tSell) ? `<span class="tooltiptext">買進 ${fmtVal(tBuy)} | 賣出 ${fmtVal(tSell)}</span>` : "";
+    const dealerTip = (dBuy || dSell) ? `<span class="tooltiptext">買進 ${fmtVal(dBuy)} | 賣出 ${fmtVal(dSell)}</span>` : "";
 
     chipEl.innerHTML = `
-      <div style="font-size:0.85em; background:#f8fafc; padding:6px 12px; border-radius:8px; border:1px solid #e2e8f0; display:inline-block; margin-top:4px;">
-        <span style="color:#64748b;">📅 三大法人 (${chip.date}):</span> 
-        外資 ${fmt(chip.foreign)} | 投信 ${fmt(chip.trust)} | 自營 ${fmt(chip.dealer)} 
-        <span style="border-left:1px solid #cbd5e1; margin-left:6px; padding-left:6px;">合計 ${fmt(chip.total)}</span>
-      </div>
+      (${chip.date}) : 
+      <span class="chip-item">外資 ${fmtDiff(chip.foreign)} 張${foreignTip}</span> | 
+      <span class="chip-item">投信 ${fmtDiff(chip.trust)} 張${trustTip}</span> | 
+      <span class="chip-item">自營 ${fmtDiff(chip.dealer)} 張${dealerTip}</span> | 
+      合計 ${fmtDiff(chip.total)} 張
     `;
   } catch (e) {
-    chipEl.innerHTML = `<span style="color:#888; font-size:0.85em;">📊 三大法人: 讀取失敗</span>`;
+    chipEl.innerHTML = `<span style="color:var(--muted); font-size:0.85em;">籌碼讀取失敗</span>`;
   }
 }
 
-// 💡 新增：同時抓取價格與籌碼
+// 💡 同時抓取價格與籌碼
 async function fetchLevelForWatchlist(symbol) {
   let finalSym = symbol.trim().toUpperCase();
   if (!finalSym.includes(".") && /^\d+$/.test(finalSym)) finalSym += ".TW";
@@ -562,7 +565,6 @@ async function fetchLevelForWatchlist(symbol) {
   const json = await res.json();
   const analysis = buildAnalysis(json.rows, "linear", "3.5");
 
-  // 💡 非同步抓取籌碼
   let chip = null;
   try {
     const chipRes = await fetch(`/api/chip?symbol=${encodeURIComponent(finalSym)}`);
@@ -674,13 +676,12 @@ function updateWatchlistDisplay() {
     const peDisp = fun.eps > 0 ? `${(item.last.close / fun.eps).toFixed(1)}x` : "N/A";
     const yieldDisp = `${((fun.dividend / item.last.close) * 100).toFixed(1)}%`;
 
-    // 💡 籌碼卡片文字標籤
     let chipHtml = "";
     if (item.chip && !item.chip.error) {
       const fmtChip = (n) => {
         const c = n > 0 ? '#c94b4b' : (n < 0 ? '#1f8a63' : '#666');
         const sign = n > 0 ? '+' : '';
-        return `<span style="color:${c}; font-weight:bold;">${sign}${n}</span>`;
+        return `<span style="color:${c}; font-weight:bold;">${sign}${(n || 0).toLocaleString()}</span>`;
       };
       chipHtml = `
         <div style="font-size: 0.78em; color: #555; margin-top: 6px; padding-top: 4px; border-top: 1px dashed #cbd5e1;">
@@ -804,7 +805,7 @@ fetchSymbolBtn.addEventListener("click", async () => {
       chartTitle.textContent = formatSymbolDisplay(json.symbol);
     }
     
-    // 💡 讀取主視覺的三大法人籌碼數據
+    // 讀取主視覺的三大法人籌碼數據
     loadMainChipData(inputVal);
 
     render();

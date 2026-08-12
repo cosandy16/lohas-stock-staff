@@ -43,7 +43,7 @@ def parse_num_to_sheets(val):
 # 🌐 FinMind API：專為 Render / 國外雲端主機設計 (免擋 IP)
 # ---------------------------------------------------------
 def fetch_finmind_chip(symbol_code):
-    """從 FinMind API 讀取三大法人籌碼 (不封鎖 Render Overseas IP)"""
+    """從 FinMind API 讀取三大法人籌碼 (含買進/賣出細節)"""
     today = datetime.date.today()
     start_date = (today - datetime.timedelta(days=10)).strftime("%Y-%m-%d")
     url = f"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInstitutionalInvestorsBuySell&data_id={symbol_code}&start_date={start_date}"
@@ -64,31 +64,33 @@ def fetch_finmind_chip(symbol_code):
         if not data_list:
             return None
 
-        # 依日期彙整三大法人買賣超 (單位為股)
+        # 依日期彙整三大法人買進與賣出張數 (單位為股)
         by_date = {}
         for row in data_list:
             d = row.get("date")
             name = str(row.get("name", ""))
             buy = row.get("buy", 0) or 0
             sell = row.get("sell", 0) or 0
-            diff = buy - sell
 
             if d not in by_date:
                 by_date[d] = {
-                    "foreign": 0,
-                    "trust": 0,
-                    "dealer": 0,
-                    "total": 0,
+                    "foreign_buy": 0,
+                    "foreign_sell": 0,
+                    "trust_buy": 0,
+                    "trust_sell": 0,
+                    "dealer_buy": 0,
+                    "dealer_sell": 0,
                 }
 
             if "Foreign" in name or "外資" in name:
-                by_date[d]["foreign"] += diff
+                by_date[d]["foreign_buy"] += buy
+                by_date[d]["foreign_sell"] += sell
             elif "Trust" in name or "投信" in name:
-                by_date[d]["trust"] += diff
+                by_date[d]["trust_buy"] += buy
+                by_date[d]["trust_sell"] += sell
             elif "Dealer" in name or "自營" in name:
-                by_date[d]["dealer"] += diff
-
-            by_date[d]["total"] += diff
+                by_date[d]["dealer_buy"] += buy
+                by_date[d]["dealer_sell"] += sell
 
         if not by_date:
             return None
@@ -97,12 +99,30 @@ def fetch_finmind_chip(symbol_code):
         latest_date = sorted(by_date.keys())[-1]
         chip = by_date[latest_date]
 
+        # 換算為張數 (除以 1000)
+        f_buy = int(round(chip["foreign_buy"] / 1000.0))
+        f_sell = int(round(chip["foreign_sell"] / 1000.0))
+        t_buy = int(round(chip["trust_buy"] / 1000.0))
+        t_sell = int(round(chip["trust_sell"] / 1000.0))
+        d_buy = int(round(chip["dealer_buy"] / 1000.0))
+        d_sell = int(round(chip["dealer_sell"] / 1000.0))
+
+        f_diff = f_buy - f_sell
+        t_diff = t_buy - t_sell
+        d_diff = d_buy - d_sell
+
         return {
             "date": latest_date,
-            "foreign": int(round(chip["foreign"] / 1000.0)),
-            "trust": int(round(chip["trust"] / 1000.0)),
-            "dealer": int(round(chip["dealer"] / 1000.0)),
-            "total": int(round(chip["total"] / 1000.0)),
+            "foreign": f_diff,
+            "foreign_buy": f_buy,
+            "foreign_sell": f_sell,
+            "trust": t_diff,
+            "trust_buy": t_buy,
+            "trust_sell": t_sell,
+            "dealer": d_diff,
+            "dealer_buy": d_buy,
+            "dealer_sell": d_sell,
+            "total": f_diff + t_diff + d_diff,
         }
     except Exception as e:
         print(f"⚠️ FinMind API 擷取失敗: {e}")
@@ -149,8 +169,14 @@ def fetch_twse_openapi(symbol_code):
                     return {
                         "date": formatted_date,
                         "foreign": foreign,
+                        "foreign_buy": 0,
+                        "foreign_sell": 0,
                         "trust": trust,
+                        "trust_buy": 0,
+                        "trust_sell": 0,
                         "dealer": dealer,
+                        "dealer_buy": 0,
+                        "dealer_sell": 0,
                         "total": total,
                     }
     except Exception as e:
