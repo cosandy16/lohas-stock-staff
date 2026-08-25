@@ -172,7 +172,27 @@ document.addEventListener("DOMContentLoaded", () => {
   watchlistSearch.addEventListener("input", updateWatchlistDisplay);
   watchlistFilterZone.addEventListener("change", updateWatchlistDisplay);
   watchlistSort.addEventListener("change", updateWatchlistDisplay);
+
+  // 💡 頁面開啟時自動讀取 localStorage 中的快取資料（不發送 API 請求）
+  loadWatchlistFromCache();
 });
+
+// 💡 快取讀取邏輯
+function loadWatchlistFromCache() {
+  const cachedData = localStorage.getItem("lohas_watchlist_cache_data");
+  const cachedTime = localStorage.getItem("lohas_watchlist_cache_time");
+
+  if (cachedData && cachedTime) {
+    try {
+      scannedWatchlistCache = JSON.parse(cachedData);
+      updateWatchlistDisplay();
+      watchlistStatus.textContent = `📁 上次暫存 (儲存於 ${cachedTime})`;
+      watchlistStatus.style.color = "#64748b"; // 使用柔和灰色強調是暫存
+    } catch (e) {
+      console.error("讀取快取失敗", e);
+    }
+  }
+}
 
 function updateRemoveSelect() {
   if (!removeWatchlistSelect) return;
@@ -225,9 +245,13 @@ btnAddWatchlistSingle.addEventListener("click", async () => {
     const data = await fetchLevelForWatchlist(newSym);
     scannedWatchlistCache.push(data);
     updateWatchlistDisplay();
+    
+    // 更新快取
+    saveWatchlistCache();
     watchlistStatus.textContent = `✅ 已成功新增 ${newSym}！`;
+    watchlistStatus.style.color = "var(--blue)";
   } catch (err) {
-    watchlistStatus.textContent = `❌ 即時新增 ${newSym} 失敗，請手動執行批量掃描。`;
+    watchlistStatus.textContent = `❌ 即時新增 ${newSym} 失敗，請點擊「執行批量更新」。`;
   }
 });
 
@@ -244,13 +268,24 @@ btnRemoveWatchlistSingle.addEventListener("click", () => {
   
   updateRemoveSelect();
   watchlistStatus.textContent = `➖ 已刪除 ${toRemove}`;
+  watchlistStatus.style.color = "var(--blue)";
   
   scannedWatchlistCache = scannedWatchlistCache.filter(item => {
     const symClean = item.sym.replace(".TW", "").replace(".TWO", "").toUpperCase();
     return symClean !== toRemove;
   });
   updateWatchlistDisplay();
+  saveWatchlistCache();
 });
+
+function saveWatchlistCache() {
+  const nowStr = new Date().toLocaleString("zh-TW", { 
+    year: 'numeric', month: '2-digit', day: '2-digit', 
+    hour: '2-digit', minute: '2-digit', hour12: false 
+  });
+  localStorage.setItem("lohas_watchlist_cache_data", JSON.stringify(scannedWatchlistCache));
+  localStorage.setItem("lohas_watchlist_cache_time", nowStr);
+}
 
 function regression(values) {
   const n = values.length;
@@ -570,6 +605,7 @@ async function fetchLevelForWatchlist(symbol) {
   };
 }
 
+// 💡 手動更新邏輯（更新最新股價並自動覆寫快取）
 btnWatchlist.addEventListener("click", async () => {
   const rawInput = watchlistInput.value;
   localStorage.setItem("lohas_watchlist", rawInput);
@@ -584,7 +620,8 @@ btnWatchlist.addEventListener("click", async () => {
   let currentIndex = 0;
   for (const s of syms) {
     currentIndex++;
-    watchlistStatus.textContent = `🔍 正在掃描樂活通道區間... (${currentIndex} / ${totalStocks})`;
+    watchlistStatus.textContent = `🔍 正在更新最新位階資料... (${currentIndex} / ${totalStocks})`;
+    watchlistStatus.style.color = "var(--blue)";
 
     try {
       const data = await fetchLevelForWatchlist(s);
@@ -595,7 +632,11 @@ btnWatchlist.addEventListener("click", async () => {
     }
     await new Promise(r => setTimeout(r, 200));
   }
-  watchlistStatus.textContent = `✅ 掃描完成 (共 ${scannedWatchlistCache.length} 檔)`;
+  
+  // 寫入快取與顯示完成時間
+  saveWatchlistCache();
+  watchlistStatus.textContent = `✅ 更新完成 (共 ${scannedWatchlistCache.length} 檔)`;
+  watchlistStatus.style.color = "var(--blue)";
   btnWatchlist.disabled = false;
 });
 
@@ -627,7 +668,6 @@ function updateWatchlistDisplay() {
   } else if (sortMode === "rankDesc") {
     resultList.sort((a, b) => getZoneWeight(priceZone(b.last)) - getZoneWeight(priceZone(a.last)));
   }
-  // default 保持為 scannedWatchlistCache 原本順序
 
   watchlistResult.innerHTML = "";
   if (resultList.length === 0) {
@@ -706,9 +746,12 @@ btnClearWatchlist.addEventListener("click", () => {
     deletedWatchlistBackup = watchlistInput.value;
     watchlistInput.value = "";
     localStorage.removeItem("lohas_watchlist");
+    localStorage.removeItem("lohas_watchlist_cache_data");
+    localStorage.removeItem("lohas_watchlist_cache_time");
     watchlistResult.innerHTML = "";
     scannedWatchlistCache = [];
     watchlistStatus.textContent = "🧹 已暫時清除，可點擊按鈕復原";
+    watchlistStatus.style.color = "var(--blue)";
     
     btnClearWatchlist.textContent = "↩️ 復原清除清單";
     btnClearWatchlist.style.backgroundColor = "#d9852b"; 
@@ -751,7 +794,7 @@ btnImportWatchlist.addEventListener("click", (e) => {
   localStorage.setItem("lohas_watchlist", cleanedInput);
   watchlistResult.innerHTML = "";
   scannedWatchlistCache = [];
-  watchlistStatus.textContent = "📥 歷史清單匯入成功！點擊下方按鈕即可重新掃描。";
+  watchlistStatus.textContent = "📥 歷史清單匯入成功！點擊下方按鈕即可重新更新。";
   updateRemoveSelect();
 });
 
