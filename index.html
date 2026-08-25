@@ -203,7 +203,6 @@
             <a href="#" id="btnImportWatchlist">restore 📥 匯入歷史清單</a>
           </div>
 
-          <!-- -->
           <div class="watchlist-single-controls" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; margin-bottom: 8px;">
             <div style="display: flex; gap: 4px;">
               <input id="addWatchlistInput" type="text" placeholder="➕ 新增代號" style="flex: 1; min-height: 34px; padding: 4px 8px; font-size: 0.85rem;" />
@@ -226,11 +225,10 @@
           </div>
           <div class="watchlist-filters">
             <select id="watchlistSort" style="grid-column: span 2;">
-              <option value="default">↕️ 排序方式 (預設順序)</option>
+              <option value="default">↕️ 按輸入代碼順序（預設）</option>
               <option value="code">🔤 按股票代碼排序</option>
-              <option value="price-desc">💰 按股價從高到低</option>
-              <option value="price-asc">🪙 按股價從低到高</option>
-              <option value="zone">📈 按位階低到高 (悲觀 ➡️ 樂觀)</option>
+              <option value="rankAsc">📉 按位階低到高 (悲觀 ➡️ 樂觀)</option>
+              <option value="rankDesc">📈 按位階高到低 (樂觀 ➡️ 悲觀)</option>
             </select>
           </div>
 
@@ -276,7 +274,6 @@
       <section class="workspace">
         <header class="summary">
           <div><p id="rangeText">--</p><h2 id="chartTitle">請選擇標的</h2></div>
-          <!-- 💡 調整位階與 R2 在同一個卡片呈現，並新增 PE 與 殖利率 卡片 -->
           <div class="status-card">
             <span>目前位階 / R²</span>
             <strong>
@@ -288,14 +285,12 @@
           <div class="status-card"><span>估算本益比</span><strong id="peText" style="color: var(--blue);">--</strong></div>
           <div class="status-card"><span>預估殖利率</span><strong id="yieldText" style="color: var(--green);">--</strong></div>
 
-          <!-- 🗓️ 三大法人籌碼卡片區塊 (帶 Tooltip 懸浮提示) -->
           <div class="chip-summary-bar">
             <span>🗓️ 三大法人籌碼：</span>
             <span id="chipText" style="color: var(--muted);">等待載入中...</span>
           </div>
         </header>
         
-        <!-- 座標軸與 Tooltip 互動包覆區 -->
         <div class="chart-card">
           <div class="chart-container-relative">
             <div id="chartTooltip" class="chart-tooltip"></div>

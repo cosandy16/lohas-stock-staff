@@ -42,7 +42,7 @@ const TW_STOCK_NAMES = {
   "5522":"遠雄","5533":"皇昌","5536":"聖暉","5538":"東明","5546":"永信建",
   "5608":"四維航","5871":"中租-KY","5876":"上海商銀","5880":"合庫金",
   "6005":"群益證","6104":"創惟","6112":"聚碩","6116":"彩晶","6121":"新普","6133":"金橋",
-  "6153":"嘉聯益","6196":"帆宣","6197":"佳必琪","6201":"亞弘電","6202":"盛群",
+  "6153":"嘉聯益","6196":"帆宣","6197":"佳必義","6201":"亞弘電","6202":"盛群",
   "6204":"艾訊","6208":"日揚","6215":"和椿","6216":"居易","6220":"岱稜",
   "6225":"旺矽","6230":"超眾","6239":"力成","6243":"迅杰","6257":"矽瑪",
   "6261":"久元","6262":"倚天酷碁","6269":"台郡","6271":"同欣電","6274":"台燿",
@@ -509,7 +509,6 @@ function render() {
   }
 }
 
-// 💡 主畫面顯示三大法人籌碼（帶懸浮買賣明細 Tooltip）
 async function loadMainChipData(symbol) {
   const chipEl = document.querySelector("#chipText");
   if (!chipEl) return;
@@ -554,7 +553,6 @@ async function loadMainChipData(symbol) {
   }
 }
 
-// 💡 監控清單專用價格計算（不抓取籌碼以提升快掃速度）
 async function fetchLevelForWatchlist(symbol) {
   let finalSym = symbol.trim().toUpperCase();
   if (!finalSym.includes(".") && /^\d+$/.test(finalSym)) finalSym += ".TW";
@@ -624,13 +622,12 @@ function updateWatchlistDisplay() {
 
   if (sortMode === "code") {
     resultList.sort((a, b) => a.sym.localeCompare(b.sym));
-  } else if (sortMode === "price-desc") {
-    resultList.sort((a, b) => b.last.close - a.last.close);
-  } else if (sortMode === "price-asc") {
-    resultList.sort((a, b) => a.last.close - b.last.close);
-  } else if (sortMode === "zone") {
+  } else if (sortMode === "rankAsc") {
     resultList.sort((a, b) => getZoneWeight(priceZone(a.last)) - getZoneWeight(priceZone(b.last)));
+  } else if (sortMode === "rankDesc") {
+    resultList.sort((a, b) => getZoneWeight(priceZone(b.last)) - getZoneWeight(priceZone(a.last)));
   }
+  // default 保持為 scannedWatchlistCache 原本順序
 
   watchlistResult.innerHTML = "";
   if (resultList.length === 0) {
@@ -665,7 +662,6 @@ function updateWatchlistDisplay() {
     const peDisp = fun.eps > 0 ? `${(item.last.close / fun.eps).toFixed(1)}x` : "N/A";
     const yieldDisp = `${((fun.dividend / item.last.close) * 100).toFixed(1)}%`;
 
-    // 💡 已移除監控卡片底部的法人籌碼列，保持卡片簡潔清爽
     card.innerHTML = `
       <div>
         <strong>${item.sym}</strong>${item.name ? `<span style="color:#555; font-size:0.85em; margin-left:6px;">${item.name}</span>` : ""}<br>
@@ -780,7 +776,6 @@ fetchSymbolBtn.addEventListener("click", async () => {
       chartTitle.textContent = formatSymbolDisplay(json.symbol);
     }
     
-    // 讀取主視覺的三大法人籌碼數據
     loadMainChipData(inputVal);
 
     render();
