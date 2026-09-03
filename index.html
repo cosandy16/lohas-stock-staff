@@ -33,14 +33,14 @@
         background-color: #475467;
       }
 
-      /* 防止 15 檔股票卡片把控制面板撐到過長的滾動區塊樣式 */
-      #watchlistResult {
-        max-height: 450px;
-        overflow-y: auto;
-        padding-right: 4px;
-        display: grid;
-        gap: 8px;
-      }
+	  /* 防止 25 檔股票卡片把控制面板撐到過長的滾動區塊樣式 */
+	  #watchlistResult {
+		max-height: 600px; /* 建議由 450px 適度放寬至 600px，讓更多卡片能直接目視 */
+		overflow-y: auto;
+		padding-right: 4px;
+		display: grid;
+		gap: 8px;
+	  }
       
       /* 讓滾動條看起來更精緻 */
       #watchlistResult::-webkit-scrollbar { width: 6px; }
@@ -192,7 +192,7 @@
         </div>
 
         <section class="panel">
-          <h2 style="margin-top:0">自訂監控清單 (最多15支)</h2>
+          <h2 style="margin-top:0">自訂監控清單 (最多25支)</h2>
           <label>
             輸入代號 (用逗點隔開)
             <input id="watchlistInput" type="text" value="2330, 2412, 0050, 2882, AAPL" />

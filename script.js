@@ -228,8 +228,8 @@ btnAddWatchlistSingle.addEventListener("click", async () => {
     return;
   }
   
-  if (syms.length >= 15) {
-    watchlistStatus.textContent = "⚠️ 監控清單最多只能 15 支股票喔！";
+	if (syms.length >= 25) {
+    watchlistStatus.textContent = "⚠️ 監控清單最多只能 25 支股票喔！";
     return;
   }
   
@@ -610,7 +610,7 @@ btnWatchlist.addEventListener("click", async () => {
   const rawInput = watchlistInput.value;
   localStorage.setItem("lohas_watchlist", rawInput);
 
-  const syms = rawInput.split(",").map(s => s.trim()).filter(s => s).slice(0, 15);
+  const syms = rawInput.split(",").map(s => s.trim()).filter(s => s).slice(0, 25);
   const totalStocks = syms.length;
 
   watchlistResult.innerHTML = "";
