@@ -605,39 +605,70 @@ async function fetchLevelForWatchlist(symbol) {
   };
 }
 
-// 💡 手動更新邏輯（更新最新股價並自動覆寫快取）
+// 💡 手動更新邏輯（併行請求 + Promise.allSettled 防爆機制）
 btnWatchlist.addEventListener("click", async () => {
   const rawInput = watchlistInput.value;
   localStorage.setItem("lohas_watchlist", rawInput);
 
-  const syms = rawInput.split(",").map(s => s.trim()).filter(s => s).slice(0, 25);
-  const totalStocks = syms.length;
+  // 1. 解析與格式化清單（限制最多 25 支）
+  const syms = rawInput
+    .split(",")
+    .map(s => s.trim().toUpperCase())
+    .filter(s => s.length > 0)
+    .slice(0, 25);
+
+  if (syms.length === 0) {
+    watchlistStatus.textContent = "⚠️ 請輸入有效的股票代碼！";
+    watchlistStatus.style.color = "var(--red, #c94b4b)";
+    return;
+  }
 
   watchlistResult.innerHTML = "";
   scannedWatchlistCache = [];
   btnWatchlist.disabled = true;
 
-  let currentIndex = 0;
-  for (const s of syms) {
-    currentIndex++;
-    watchlistStatus.textContent = `🔍 正在更新最新位階資料... (${currentIndex} / ${totalStocks})`;
-    watchlistStatus.style.color = "var(--blue)";
-
-    try {
-      const data = await fetchLevelForWatchlist(s);
-      scannedWatchlistCache.push(data);
-      updateWatchlistDisplay();
-    } catch {
-      watchlistResult.innerHTML += `<div style="color:red; font-size:0.8rem; padding:8px;">❌ ${s} 失敗</div>`;
-    }
-    await new Promise(r => setTimeout(r, 200));
-  }
-  
-  // 寫入快取與顯示完成時間
-  saveWatchlistCache();
-  watchlistStatus.textContent = `✅ 更新完成 (共 ${scannedWatchlistCache.length} 檔)`;
+  watchlistStatus.textContent = `🔄 正在批量更新 ${syms.length} 支股票位階...`;
   watchlistStatus.style.color = "var(--blue)";
-  btnWatchlist.disabled = false;
+
+  try {
+    // 2. 使用 Promise.allSettled 進行併行（平行）請求
+    const fetchPromises = syms.map(symbol => fetchLevelForWatchlist(symbol));
+    const results = await Promise.allSettled(fetchPromises);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    // 3. 處理傳回結果
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") {
+        scannedWatchlistCache.push(result.value);
+        successCount++;
+      } else {
+        failCount++;
+        console.error(`❌ 股票 ${syms[index]} 抓取失敗:`, result.reason);
+      }
+    });
+
+    // 4. 渲染畫面並更新快取
+    updateWatchlistDisplay();
+    saveWatchlistCache();
+
+    // 5. 提示最終狀態
+    if (failCount === 0) {
+      watchlistStatus.textContent = `✅ 更新完成 (共 ${successCount} 檔)`;
+      watchlistStatus.style.color = "var(--blue)";
+    } else {
+      watchlistStatus.textContent = `⚠️ 更新完成：成功 ${successCount} 檔，失敗 ${failCount} 檔`;
+      watchlistStatus.style.color = "#d9852b";
+    }
+
+  } catch (err) {
+    console.error("批量更新過程發生未預期錯誤:", err);
+    watchlistStatus.textContent = "❌ 批量更新失敗，請檢查網路或 API 狀態。";
+    watchlistStatus.style.color = "var(--red, #c94b4b)";
+  } finally {
+    btnWatchlist.disabled = false;
+  }
 });
 
 function updateWatchlistDisplay() {
