@@ -743,28 +743,31 @@ function updateWatchlistDisplay() {
 
 btnClearWatchlist.addEventListener("click", () => {
   if (btnClearWatchlist.textContent.includes("全部清除")) {
-    deletedWatchlistBackup = watchlistInput.value;
-    watchlistInput.value = "";
-    localStorage.removeItem("lohas_watchlist");
-    localStorage.removeItem("lohas_watchlist_cache_data");
-    localStorage.removeItem("lohas_watchlist_cache_time");
-    watchlistResult.innerHTML = "";
-    scannedWatchlistCache = [];
-    watchlistStatus.textContent = "🧹 已暫時清除，可點擊按鈕復原";
-    watchlistStatus.style.color = "var(--blue)";
+    deletedWatchlistBackup = watchlistInput.value;[cite: 1]
+    watchlistInput.value = "";[cite: 1]
+    localStorage.removeItem("lohas_watchlist");[cite: 1]
+    localStorage.removeItem("lohas_watchlist_cache_data");[cite: 1]
+    localStorage.removeItem("lohas_watchlist_cache_time");[cite: 1]
+    watchlistResult.innerHTML = "";[cite: 1]
+    scannedWatchlistCache = [];[cite: 1]
+    watchlistStatus.textContent = "🧹 已暫時清除，可點擊按鈕復原";[cite: 1]
+    watchlistStatus.style.color = "var(--blue)";[cite: 1]
     
-    btnClearWatchlist.textContent = "↩️ 復原清除清單";
-    btnClearWatchlist.style.backgroundColor = "#d9852b"; 
+    btnClearWatchlist.textContent = "↩️ 復原清除清單";[cite: 1]
+    btnClearWatchlist.style.backgroundColor = "#d9852b";[cite: 1] 
+
+    // 💡 清除時同步保持下拉選單為「樂觀 ➔ 悲觀」
+    watchlistSort.value = "rankDesc";
   } else {
     if (deletedWatchlistBackup) {
-      watchlistInput.value = deletedWatchlistBackup;
-      localStorage.setItem("lohas_watchlist", deletedWatchlistBackup);
-      watchlistStatus.textContent = "↩️ 已成功復原清單！";
+      watchlistInput.value = deletedWatchlistBackup;[cite: 1]
+      localStorage.setItem("lohas_watchlist", deletedWatchlistBackup);[cite: 1]
+      watchlistStatus.textContent = "↩️ 已成功復原清單！";[cite: 1]
     }
-    btnClearWatchlist.textContent = "🧹 全部清除";
-    btnClearWatchlist.style.backgroundColor = "#667085";
+    btnClearWatchlist.textContent = "🧹 全部清除";[cite: 1]
+    btnClearWatchlist.style.backgroundColor = "#667085";[cite: 1]
   }
-  updateRemoveSelect();
+  updateRemoveSelect();[cite: 1]
 });
 
 btnExportWatchlist.addEventListener("click", (e) => {
