@@ -87,9 +87,6 @@ const STOCK_FUNDAMENTALS = {
   "NVDA": { eps: 1.8, dividend: 0.04 },
 };
 
-// 全域近 20 日歷史籌碼快取（用於主圖表 Hover 匹配）
-let currentMainChipHistory = [];
-
 function getFundamentals(symbol, currentPrice) {
   if (!symbol) return { eps: 10, dividend: 4 };
   const code = symbol.replace(/\.(TW|TWO)$/i, "").toUpperCase();
@@ -172,9 +169,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   updateRemoveSelect();
 
-  if (watchlistSearch) watchlistSearch.addEventListener("input", updateWatchlistDisplay);
-  if (watchlistFilterZone) watchlistFilterZone.addEventListener("change", updateWatchlistDisplay);
-  if (watchlistSort) watchlistSort.addEventListener("change", updateWatchlistDisplay);
+  watchlistSearch.addEventListener("input", updateWatchlistDisplay);
+  watchlistFilterZone.addEventListener("change", updateWatchlistDisplay);
+  watchlistSort.addEventListener("change", updateWatchlistDisplay);
 
   loadWatchlistFromCache();
 });
@@ -187,10 +184,8 @@ function loadWatchlistFromCache() {
     try {
       scannedWatchlistCache = JSON.parse(cachedData);
       updateWatchlistDisplay();
-      if (watchlistStatus) {
-        watchlistStatus.textContent = `📁 上次暫存 (儲存於 ${cachedTime})`;
-        watchlistStatus.style.color = "#64748b";
-      }
+      watchlistStatus.textContent = `📁 上次暫存 (儲存於 ${cachedTime})`;
+      watchlistStatus.style.color = "#64748b";
     } catch (e) {
       console.error("讀取快取失敗", e);
     }
@@ -219,70 +214,66 @@ function updateRemoveSelect() {
   });
 }
 
-if (btnAddWatchlistSingle) {
-  btnAddWatchlistSingle.addEventListener("click", async () => {
-    const newSym = addWatchlistInput.value.trim().toUpperCase();
-    if (!newSym) return;
-    
-    const currentText = watchlistInput.value || "";
-    const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
-    
-    if (syms.includes(newSym)) {
-      watchlistStatus.textContent = `⚠️ 股號 ${newSym} 已在清單中！`;
-      return;
-    }
-    
-    if (syms.length >= 25) {
-      watchlistStatus.textContent = "⚠️ 監控清單最多只能 25 支股票喔！";
-      return;
-    }
-    
-    syms.push(newSym);
-    watchlistInput.value = syms.join(", ");
-    localStorage.setItem("lohas_watchlist", watchlistInput.value);
-    addWatchlistInput.value = "";
-    
-    updateRemoveSelect();
-    watchlistStatus.textContent = `➕ 正在即時新增並計算 ${newSym}...`;
-    
-    try {
-      const data = await fetchLevelForWatchlist(newSym);
-      scannedWatchlistCache.push(data);
-      updateWatchlistDisplay();
-      
-      saveWatchlistCache();
-      watchlistStatus.textContent = `✅ 已成功新增 ${newSym}！`;
-      watchlistStatus.style.color = "var(--blue)";
-    } catch (err) {
-      watchlistStatus.textContent = `❌ 即時新增 ${newSym} 失敗，請點擊「執行批量更新」。`;
-    }
-  });
-}
-
-if (btnRemoveWatchlistSingle) {
-  btnRemoveWatchlistSingle.addEventListener("click", () => {
-    const toRemove = removeWatchlistSelect.value;
-    if (!toRemove || toRemove === "📭 清單為空") return;
-    
-    const currentText = watchlistInput.value || "";
-    const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
-    
-    const filtered = syms.filter(s => s !== toRemove);
-    watchlistInput.value = filtered.join(", ");
-    localStorage.setItem("lohas_watchlist", watchlistInput.value);
-    
-    updateRemoveSelect();
-    watchlistStatus.textContent = `➖ 已刪除 ${toRemove}`;
-    watchlistStatus.style.color = "var(--blue)";
-    
-    scannedWatchlistCache = scannedWatchlistCache.filter(item => {
-      const symClean = item.sym.replace(".TW", "").replace(".TWO", "").toUpperCase();
-      return symClean !== toRemove;
-    });
+btnAddWatchlistSingle.addEventListener("click", async () => {
+  const newSym = addWatchlistInput.value.trim().toUpperCase();
+  if (!newSym) return;
+  
+  const currentText = watchlistInput.value || "";
+  const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+  
+  if (syms.includes(newSym)) {
+    watchlistStatus.textContent = `⚠️ 股號 ${newSym} 已在清單中！`;
+    return;
+  }
+  
+  if (syms.length >= 25) {
+    watchlistStatus.textContent = "⚠️ 監控清單最多只能 25 支股票喔！";
+    return;
+  }
+  
+  syms.push(newSym);
+  watchlistInput.value = syms.join(", ");
+  localStorage.setItem("lohas_watchlist", watchlistInput.value);
+  addWatchlistInput.value = "";
+  
+  updateRemoveSelect();
+  watchlistStatus.textContent = `➕ 正在即時新增並計算 ${newSym}...`;
+  
+  try {
+    const data = await fetchLevelForWatchlist(newSym);
+    scannedWatchlistCache.push(data);
     updateWatchlistDisplay();
+    
     saveWatchlistCache();
+    watchlistStatus.textContent = `✅ 已成功新增 ${newSym}！`;
+    watchlistStatus.style.color = "var(--blue)";
+  } catch (err) {
+    watchlistStatus.textContent = `❌ 即時新增 ${newSym} 失敗，請點擊「執行批量更新」。`;
+  }
+});
+
+btnRemoveWatchlistSingle.addEventListener("click", () => {
+  const toRemove = removeWatchlistSelect.value;
+  if (!toRemove || toRemove === "📭 清單為空") return;
+  
+  const currentText = watchlistInput.value || "";
+  const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+  
+  const filtered = syms.filter(s => s !== toRemove);
+  watchlistInput.value = filtered.join(", ");
+  localStorage.setItem("lohas_watchlist", watchlistInput.value);
+  
+  updateRemoveSelect();
+  watchlistStatus.textContent = `➖ 已刪除 ${toRemove}`;
+  watchlistStatus.style.color = "var(--blue)";
+  
+  scannedWatchlistCache = scannedWatchlistCache.filter(item => {
+    const symClean = item.sym.replace(".TW", "").replace(".TWO", "").toUpperCase();
+    return symClean !== toRemove;
   });
-}
+  updateWatchlistDisplay();
+  saveWatchlistCache();
+});
 
 function saveWatchlistCache() {
   const nowStr = new Date().toLocaleString("zh-TW", { 
@@ -473,8 +464,8 @@ function renderChart(analysis) {
           tooltipLine.style.display = "block";
 
           let tooltipLeft = currX + 15;
-          if (tooltipLeft + 220 > width) {
-            tooltipLeft = currX - 235;
+          if (tooltipLeft + 190 > width) {
+            tooltipLeft = currX - 215;
           }
           const scaleX = rect.width / width;
           const scaleY = rect.height / height;
@@ -488,26 +479,6 @@ function renderChart(analysis) {
           const histPe = pFun.eps > 0 ? `${(point.close / pFun.eps).toFixed(1)}x` : "N/A (ETF)";
           const histYield = `${((pFun.dividend / point.close) * 100).toFixed(2)}%`;
 
-          // 匹配當日籌碼歷史資料
-          const chipItem = currentMainChipHistory.find(h => h.date === point.date);
-          let chipHtml = `<div style="color:#94a3b8; font-size:0.85em; margin-top:4px;">無歷史籌碼</div>`;
-          
-          if (chipItem) {
-            const fmtChip = (val) => {
-              const c = val > 0 ? '#c94b4b' : (val < 0 ? '#1f8a63' : '#ccc');
-              const s = val > 0 ? '+' : '';
-              return `<span style="color:${c}; font-weight:bold;">${s}${val.toLocaleString()} 張</span>`;
-            };
-            chipHtml = `
-              <div style="border-top:1px dashed rgba(255,255,255,0.2); margin-top:4px; padding-top:4px; font-size:0.85em;">
-                <div>外資: ${fmtChip(chipItem.foreign)}</div>
-                <div>投信: ${fmtChip(chipItem.trust)}</div>
-                <div>自營: ${fmtChip(chipItem.dealer)}</div>
-                <div>合計: ${fmtChip(chipItem.total)}</div>
-              </div>
-            `;
-          }
-
           chartTooltip.innerHTML = `
             <div class="title">${point.date}</div>
             <div><span>收盤價:</span><strong>${formatPrice(point.raw_close || point.close)}</strong></div>
@@ -518,7 +489,6 @@ function renderChart(analysis) {
             <div><span>中線:</span><span>${formatPrice(point.mid)}</span></div>
             <div><span>-1SD 偏悲:</span><span>${formatPrice(point.minus1)}</span></div>
             <div><span>-2SD 悲觀:</span><span>${formatPrice(point.minus2)}</span></div>
-            ${chipHtml}
           `;
         }
       } else {
@@ -579,39 +549,43 @@ async function loadMainChipData(symbol) {
 
   try {
     const res = await fetch(`/api/chip?symbol=${encodeURIComponent(symbol)}`);
-    const chipRes = await res.json();
-    
-    if (!chipRes || chipRes.error || chipRes.status === "error") {
+    const chip = await res.json();
+    if (!chip || chip.error) {
       chipEl.innerHTML = `<span style="color:var(--muted); font-size:0.85em;">尚無今日盤後籌碼資料或非台股標的</span>`;
-      currentMainChipHistory = [];
       return;
     }
-
-    const chip = chipRes.data || chipRes;
-    currentMainChipHistory = chip.history || [];
 
     const fmtDiff = (num) => {
       const color = num > 0 ? "#c94b4b" : (num < 0 ? "#1f8a63" : "inherit");
       const sign = num > 0 ? "+" : "";
       return `<strong style="color:${color};">${sign}${(num || 0).toLocaleString()}</strong>`;
     };
+    const fmtVal = (num) => (num || 0).toLocaleString();
 
-    const sum20 = chip.sum_20d ? ` (近20日累計: ${fmtDiff(chip.sum_20d.total)} 張)` : "";
+    const fBuy = chip.foreign_buy || 0;
+    const fSell = chip.foreign_sell || 0;
+    const tBuy = chip.trust_buy || 0;
+    const tSell = chip.trust_sell || 0;
+    const dBuy = chip.dealer_buy || 0;
+    const dSell = chip.dealer_sell || 0;
+
+    const foreignTip = (fBuy || fSell) ? `<span class="tooltiptext">買進 ${fmtVal(fBuy)} | 賣出 ${fmtVal(fSell)}</span>` : "";
+    const trustTip = (tBuy || tSell) ? `<span class="tooltiptext">買進 ${fmtVal(tBuy)} | 賣出 ${fmtVal(tSell)}</span>` : "";
+    const dealerTip = (dBuy || dSell) ? `<span class="tooltiptext">買進 ${fmtVal(dBuy)} | 賣出 ${fmtVal(dSell)}</span>` : "";
 
     chipEl.innerHTML = `
       (${chip.date}) : 
-      <span class="chip-item">外資 ${fmtDiff(chip.foreign)} 張</span> | 
-      <span class="chip-item">投信 ${fmtDiff(chip.trust)} 張</span> | 
-      <span class="chip-item">自營 ${fmtDiff(chip.dealer)} 張</span> | 
-      合計 ${fmtDiff(chip.total)} 張 ${sum20}
+      <span class="chip-item">外資 ${fmtDiff(chip.foreign)} 張${foreignTip}</span> | 
+      <span class="chip-item">投信 ${fmtDiff(chip.trust)} 張${trustTip}</span> | 
+      <span class="chip-item">自營 ${fmtDiff(chip.dealer)} 張${dealerTip}</span> | 
+      合計 ${fmtDiff(chip.total)} 張
     `;
   } catch (e) {
     chipEl.innerHTML = `<span style="color:var(--muted); font-size:0.85em;">籌碼讀取失敗</span>`;
-    currentMainChipHistory = [];
   }
 }
 
-// 併行抓取 K線與三大法人籌碼 API
+// 💡 併行抓取 K線與三大法人籌碼 API
 async function fetchLevelForWatchlist(symbol) {
   let finalSym = symbol.trim().toUpperCase();
   if (!finalSym.includes(".") && /^\d+$/.test(finalSym)) finalSym += ".TW";
@@ -630,9 +604,7 @@ async function fetchLevelForWatchlist(symbol) {
   }
 
   const json = yahooRes.value;
-  const chipRaw = chipRes.status === "fulfilled" ? chipRes.value : null;
-  const chipData = (chipRaw && chipRaw.data) ? chipRaw.data : chipRaw;
-  
+  const chipData = chipRes.status === "fulfilled" ? chipRes.value : null;
   const analysis = buildAnalysis(json.rows, "linear", "3.5");
 
   return { 
@@ -644,75 +616,73 @@ async function fetchLevelForWatchlist(symbol) {
 }
 
 // 手動更新邏輯（併行請求 + Promise.allSettled 防爆機制）
-if (btnWatchlist) {
-  btnWatchlist.addEventListener("click", async () => {
-    const rawInput = watchlistInput.value;
-    localStorage.setItem("lohas_watchlist", rawInput);
+btnWatchlist.addEventListener("click", async () => {
+  const rawInput = watchlistInput.value;
+  localStorage.setItem("lohas_watchlist", rawInput);
 
-    const syms = rawInput
-      .split(",")
-      .map(s => s.trim().toUpperCase())
-      .filter(s => s.length > 0)
-      .slice(0, 25);
+  const syms = rawInput
+    .split(",")
+    .map(s => s.trim().toUpperCase())
+    .filter(s => s.length > 0)
+    .slice(0, 25);
 
-    if (syms.length === 0) {
-      watchlistStatus.textContent = "⚠️ 請輸入有效的股票代碼！";
-      watchlistStatus.style.color = "var(--red, #c94b4b)";
-      return;
-    }
+  if (syms.length === 0) {
+    watchlistStatus.textContent = "⚠️ 請輸入有效的股票代碼！";
+    watchlistStatus.style.color = "var(--red, #c94b4b)";
+    return;
+  }
 
-    watchlistResult.innerHTML = "";
-    scannedWatchlistCache = [];
-    btnWatchlist.disabled = true;
+  watchlistResult.innerHTML = "";
+  scannedWatchlistCache = [];
+  btnWatchlist.disabled = true;
 
-    watchlistStatus.textContent = `🔄 正在批量更新 ${syms.length} 支股票（含籌碼）...`;
-    watchlistStatus.style.color = "var(--blue)";
+  watchlistStatus.textContent = `🔄 正在批量更新 ${syms.length} 支股票（含籌碼）...`;
+  watchlistStatus.style.color = "var(--blue)";
 
-    try {
-      const fetchPromises = syms.map(symbol => fetchLevelForWatchlist(symbol));
-      const results = await Promise.allSettled(fetchPromises);
+  try {
+    const fetchPromises = syms.map(symbol => fetchLevelForWatchlist(symbol));
+    const results = await Promise.allSettled(fetchPromises);
 
-      let successCount = 0;
-      let failCount = 0;
+    let successCount = 0;
+    let failCount = 0;
 
-      results.forEach((result, index) => {
-        if (result.status === "fulfilled") {
-          scannedWatchlistCache.push(result.value);
-          successCount++;
-        } else {
-          failCount++;
-          console.error(`❌ 股票 ${syms[index]} 抓取失敗:`, result.reason);
-        }
-      });
-
-      updateWatchlistDisplay();
-      saveWatchlistCache();
-
-      if (failCount === 0) {
-        watchlistStatus.textContent = `✅ 更新完成 (共 ${successCount} 檔)`;
-        watchlistStatus.style.color = "var(--blue)";
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") {
+        scannedWatchlistCache.push(result.value);
+        successCount++;
       } else {
-        watchlistStatus.textContent = `⚠️ 更新完成：成功 ${successCount} 檔，失敗 ${failCount} 檔`;
-        watchlistStatus.style.color = "#d9852b";
+        failCount++;
+        console.error(`❌ 股票 ${syms[index]} 抓取失敗:`, result.reason);
       }
+    });
 
-    } catch (err) {
-      console.error("批量更新過程發生未預期錯誤:", err);
-      watchlistStatus.textContent = "❌ 批量更新失敗，請檢查網路或 API 狀態。";
-      watchlistStatus.style.color = "var(--red, #c94b4b)";
-    } finally {
-      btnWatchlist.disabled = false;
+    updateWatchlistDisplay();
+    saveWatchlistCache();
+
+    if (failCount === 0) {
+      watchlistStatus.textContent = `✅ 更新完成 (共 ${successCount} 檔)`;
+      watchlistStatus.style.color = "var(--blue)";
+    } else {
+      watchlistStatus.textContent = `⚠️ 更新完成：成功 ${successCount} 檔，失敗 ${failCount} 檔`;
+      watchlistStatus.style.color = "#d9852b";
     }
-  });
-}
 
-// 渲染清單卡片（含三大法人籌碼數據）
+  } catch (err) {
+    console.error("批量更新過程發生未預期錯誤:", err);
+    watchlistStatus.textContent = "❌ 批量更新失敗，請檢查網路或 API 狀態。";
+    watchlistStatus.style.color = "var(--red, #c94b4b)";
+  } finally {
+    btnWatchlist.disabled = false;
+  }
+});
+
+// 💡 渲染清單卡片（含三大法人籌碼數據）
 function updateWatchlistDisplay() {
   if (scannedWatchlistCache.length === 0) return;
 
-  const searchQuery = watchlistSearch ? watchlistSearch.value.trim().toLowerCase() : "";
-  const filterZone = watchlistFilterZone ? watchlistFilterZone.value : "all";
-  const sortMode = watchlistSort ? watchlistSort.value : "rankDesc";
+  const searchQuery = watchlistSearch.value.trim().toLowerCase();
+  const filterZone = watchlistFilterZone.value;
+  const sortMode = watchlistSort.value;
 
   let resultList = scannedWatchlistCache.filter(item => {
     const matchSearch = item.sym.toLowerCase().includes(searchQuery) || item.name.toLowerCase().includes(searchQuery);
@@ -774,15 +744,7 @@ function updateWatchlistDisplay() {
       const total = item.chip.total || 0;
       const chipColor = total > 0 ? "#c94b4b" : (total < 0 ? "#1f8a63" : "inherit");
       const sign = total > 0 ? "+" : "";
-      
-      let sum20Text = "";
-      if (item.chip.sum_20d) {
-        const sumTotal = item.chip.sum_20d.total;
-        const sumColor = sumTotal > 0 ? "#c94b4b" : (sumTotal < 0 ? "#1f8a63" : "inherit");
-        sum20Text = ` | 20日累計: <strong style="color:${sumColor}">${sumTotal > 0 ? '+' : ''}${sumTotal.toLocaleString()} 張</strong>`;
-      }
-
-      chipSummary = `三大法人: <strong style="color:${chipColor}">${sign}${total.toLocaleString()} 張</strong>${sum20Text}`;
+      chipSummary = `三大法人: <strong style="color:${chipColor}">${sign}${total.toLocaleString()} 張</strong>`;
     }
 
     card.innerHTML = `
@@ -826,120 +788,108 @@ function updateWatchlistDisplay() {
   });
 }
 
-if (btnClearWatchlist) {
-  btnClearWatchlist.addEventListener("click", () => {
-    if (btnClearWatchlist.textContent.includes("全部清除")) {
-      deletedWatchlistBackup = watchlistInput.value;
-      watchlistInput.value = "";
-      localStorage.removeItem("lohas_watchlist");
-      localStorage.removeItem("lohas_watchlist_cache_data");
-      localStorage.removeItem("lohas_watchlist_cache_time");
-      watchlistResult.innerHTML = "";
-      scannedWatchlistCache = [];
-      watchlistStatus.textContent = "🧹 已暫時清除，可點擊按鈕復原";
-      watchlistStatus.style.color = "var(--blue)";
-      
-      btnClearWatchlist.textContent = "↩️ 復原清除清單";
-      btnClearWatchlist.style.backgroundColor = "#d9852b"; 
-
-      if (watchlistSort) watchlistSort.value = "rankDesc";
-    } else {
-      if (deletedWatchlistBackup) {
-        watchlistInput.value = deletedWatchlistBackup;
-        localStorage.setItem("lohas_watchlist", deletedWatchlistBackup);
-        watchlistStatus.textContent = "↩️ 已成功復原清單！";
-      }
-      btnClearWatchlist.textContent = "🧹 全部清除";
-      btnClearWatchlist.style.backgroundColor = "#667085";
-    }
-    updateRemoveSelect();
-  });
-}
-
-if (btnExportWatchlist) {
-  btnExportWatchlist.addEventListener("click", (e) => {
-    e.preventDefault();
-    const currentText = watchlistInput.value.trim();
-    if (!currentText) {
-      watchlistStatus.textContent = "⚠️ 目前清單是空的，無法匯出喔！";
-      return;
-    }
-    navigator.clipboard.writeText(currentText).then(() => {
-      watchlistStatus.textContent = "📋 清單已自動複製到剪貼簿！可貼至記事本備份。";
-    }).catch(() => {
-      watchlistStatus.textContent = "❌ 複製失敗，請手動複製輸入框文字。";
-    });
-  });
-}
-
-if (btnImportWatchlist) {
-  btnImportWatchlist.addEventListener("click", (e) => {
-    e.preventDefault();
-    const userInput = prompt("請貼上您先前匯出的股票代號（請用逗點隔開）：");
-    if (userInput === null) return;
-    const cleanedInput = userInput.trim();
-    if (!cleanedInput) {
-      alert("輸入內容為空，取消匯入。");
-      return;
-    }
-    watchlistInput.value = cleanedInput;
-    localStorage.setItem("lohas_watchlist", cleanedInput);
+btnClearWatchlist.addEventListener("click", () => {
+  if (btnClearWatchlist.textContent.includes("全部清除")) {
+    deletedWatchlistBackup = watchlistInput.value;
+    watchlistInput.value = "";
+    localStorage.removeItem("lohas_watchlist");
+    localStorage.removeItem("lohas_watchlist_cache_data");
+    localStorage.removeItem("lohas_watchlist_cache_time");
     watchlistResult.innerHTML = "";
     scannedWatchlistCache = [];
-    watchlistStatus.textContent = "📥 歷史清單匯入成功！點擊下方按鈕即可重新更新。";
-    updateRemoveSelect();
-  });
-}
+    watchlistStatus.textContent = "🧹 已暫時清除，可點擊按鈕復原";
+    watchlistStatus.style.color = "var(--blue)";
+    
+    btnClearWatchlist.textContent = "↩️ 復原清除清單";
+    btnClearWatchlist.style.backgroundColor = "#d9852b"; 
 
-if (fetchSymbolBtn) {
-  fetchSymbolBtn.addEventListener("click", async () => {
-    fetchStatus.textContent = "讀取中...";
-    let inputVal = symbolInput.value.trim().toUpperCase();
-    let selectedMarket = market.value;
-
-    try {
-      const p = new URLSearchParams({ 
-        symbol: inputVal, 
-        market: selectedMarket, 
-        years: periodYears.value 
-      });
-      
-      const res = await fetch(`/api/yahoo?${p.toString()}`);
-      if (!res.ok) throw new Error();
-      const json = await res.json();
-      csvInput.value = JSON.stringify(json.rows);
-      
-      if (chartTitle) {
-        chartTitle.textContent = formatSymbolDisplay(json.symbol);
-      }
-      
-      await loadMainChipData(inputVal);
-
-      render();
-      fetchStatus.textContent = "成功";
-      localStorage.setItem("lohas_last_symbol", inputVal);
-      localStorage.setItem("lohas_last_market", selectedMarket);
-    } catch (err) { 
-      fetchStatus.textContent = "失敗"; 
-      console.error("Fetch 錯誤資訊:", err);
+    watchlistSort.value = "rankDesc";
+  } else {
+    if (deletedWatchlistBackup) {
+      watchlistInput.value = deletedWatchlistBackup;
+      localStorage.setItem("lohas_watchlist", deletedWatchlistBackup);
+      watchlistStatus.textContent = "↩️ 已成功復原清單！";
     }
-  });
-}
+    btnClearWatchlist.textContent = "🧹 全部清除";
+    btnClearWatchlist.style.backgroundColor = "#667085";
+  }
+  updateRemoveSelect();
+});
 
-const sampleBtn = document.querySelector("#sampleBtn");
-if (sampleBtn) {
-  sampleBtn.addEventListener("click", () => {
-    const mock = []; 
-    let p = 100;
-    for(let i=0; i<300; i++) {
-      mock.push({ 
-        date: new Date(Date.now() - (300-i)*86400000).toISOString().split('T')[0], 
-        close: p += (Math.random()-0.48) 
-      });
+btnExportWatchlist.addEventListener("click", (e) => {
+  e.preventDefault();
+  const currentText = watchlistInput.value.trim();
+  if (!currentText) {
+    watchlistStatus.textContent = "⚠️ 目前清單是空的，無法匯出喔！";
+    return;
+  }
+  navigator.clipboard.writeText(currentText).then(() => {
+    watchlistStatus.textContent = "📋 清單已自動複製到剪貼簿！可貼至記事本備份。";
+  }).catch(() => {
+    watchlistStatus.textContent = "❌ 複製失敗，請手動複製輸入框文字。";
+  });
+});
+
+btnImportWatchlist.addEventListener("click", (e) => {
+  e.preventDefault();
+  const userInput = prompt("請貼上您先前匯出的股票代號（請用逗點隔開）：");
+  if (userInput === null) return;
+  const cleanedInput = userInput.trim();
+  if (!cleanedInput) {
+    alert("輸入內容為空，取消匯入。");
+    return;
+  }
+  watchlistInput.value = cleanedInput;
+  localStorage.setItem("lohas_watchlist", cleanedInput);
+  watchlistResult.innerHTML = "";
+  scannedWatchlistCache = [];
+  watchlistStatus.textContent = "📥 歷史清單匯入成功！點擊下方按鈕即可重新更新。";
+  updateRemoveSelect();
+});
+
+fetchSymbolBtn.addEventListener("click", async () => {
+  fetchStatus.textContent = "讀取中...";
+  let inputVal = symbolInput.value.trim().toUpperCase();
+  let selectedMarket = market.value;
+
+  try {
+    const p = new URLSearchParams({ 
+      symbol: inputVal, 
+      market: selectedMarket, 
+      years: periodYears.value 
+    });
+    
+    const res = await fetch(`/api/yahoo?${p.toString()}`);
+    if (!res.ok) throw new Error();
+    const json = await res.json();
+    csvInput.value = JSON.stringify(json.rows);
+    
+    if (chartTitle) {
+      chartTitle.textContent = formatSymbolDisplay(json.symbol);
     }
-    csvInput.value = JSON.stringify(mock);
-    if (chartTitle) chartTitle.textContent = "模擬範例股票";
-    currentMainChipHistory = [];
+    
+    loadMainChipData(inputVal);
+
     render();
-  });
-}
+    fetchStatus.textContent = "成功";
+    localStorage.setItem("lohas_last_symbol", inputVal);
+    localStorage.setItem("lohas_last_market", selectedMarket);
+  } catch (err) { 
+    fetchStatus.textContent = "失敗"; 
+    console.error("Fetch 錯誤資訊:", err);
+  }
+});
+
+document.querySelector("#sampleBtn").addEventListener("click", () => {
+  const mock = []; 
+  let p = 100;
+  for(let i=0; i<300; i++) {
+    mock.push({ 
+      date: new Date(Date.now() - (300-i)*86400000).toISOString().split('T')[0], 
+      close: p += (Math.random()-0.48) 
+    });
+  }
+  csvInput.value = JSON.stringify(mock);
+  if (chartTitle) chartTitle.textContent = "模擬範例股票";
+  render();
+});
