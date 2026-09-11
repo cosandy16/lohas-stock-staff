@@ -156,7 +156,6 @@ const levelDefs = [
   { key: "minus2", label: "-2SD 悲觀線", color: "#12614a" },
 ];
 
-// 💡 計算離現價最近的線與相差金額/百分比
 function getNearestLevel(p) {
   const currentPrice = p.close;
   let nearest = null;
@@ -183,10 +182,10 @@ function getNearestLevel(p) {
   return nearest;
 }
 
-// 💡 格式化提示文字
+// 💡 調整：多 / 少
 function formatNearestText(nearest) {
   if (!nearest) return "";
-  const sign = nearest.diff >= 0 ? "漲" : "跌";
+  const sign = nearest.diff >= 0 ? "多" : "少";
   const absDiff = Math.abs(nearest.diff).toFixed(2);
   const absPct = Math.abs(nearest.pct).toFixed(2);
   const cleanLabel = nearest.label.replace(/^[\+\-]\dSD\s*/, "");
@@ -740,12 +739,25 @@ function updateWatchlistDisplay() {
     return matchSearch && matchZone;
   });
 
+  // 💡 排序邏輯（含距離最近線排序）
   if (sortMode === "code") {
     resultList.sort((a, b) => a.sym.localeCompare(b.sym));
   } else if (sortMode === "rankAsc") {
     resultList.sort((a, b) => getZoneWeight(priceZone(a.last)) - getZoneWeight(priceZone(b.last)));
   } else if (sortMode === "rankDesc") {
     resultList.sort((a, b) => getZoneWeight(priceZone(b.last)) - getZoneWeight(priceZone(a.last)));
+  } else if (sortMode === "nearAsc") {
+    resultList.sort((a, b) => {
+      const nearA = getNearestLevel(a.last);
+      const nearB = getNearestLevel(b.last);
+      return Math.abs(nearA.pct) - Math.abs(nearB.pct);
+    });
+  } else if (sortMode === "nearDesc") {
+    resultList.sort((a, b) => {
+      const nearA = getNearestLevel(a.last);
+      const nearB = getNearestLevel(b.last);
+      return Math.abs(nearB.pct) - Math.abs(nearA.pct);
+    });
   }
 
   watchlistResult.innerHTML = "";
