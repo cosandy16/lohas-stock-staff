@@ -157,6 +157,7 @@ const levelDefs = [
 ];
 
 function getNearestLevel(p) {
+  if (!p) return null;
   const currentPrice = p.close;
   let nearest = null;
   let minDiff = Infinity;
@@ -164,10 +165,14 @@ function getNearestLevel(p) {
   levelDefs.forEach(l => {
     const levelPrice = p[l.key];
     const absDiff = Math.abs(currentPrice - levelPrice);
+    
     if (absDiff < minDiff) {
       minDiff = absDiff;
-      const diffVal = levelPrice - currentPrice;
-      const pct = (diffVal / currentPrice) * 100;
+      // 距線差距：正數代表現價高於目標線，負數代表低於目標線
+      const diffVal = currentPrice - levelPrice;
+      // 距離百分比：(絕對距離 / 現價) * 100
+      const pct = (absDiff / currentPrice) * 100;
+
       nearest = {
         label: l.label,
         key: l.key,
@@ -175,7 +180,7 @@ function getNearestLevel(p) {
         price: levelPrice,
         diff: diffVal,
         absDiff: absDiff,
-        pct: pct
+        pct: pct // 這裡保證是正數的距離百分比
       };
     }
   });
@@ -739,7 +744,7 @@ function updateWatchlistDisplay() {
     return matchSearch && matchZone;
   });
 
-  // 💡 排序邏輯（以離線距離的「絕對值 Math.abs」來排序）
+// 💡 排序邏輯修正：確保取得正確百分比並以絕對差距排序
   if (sortMode === "code") {
     resultList.sort((a, b) => a.sym.localeCompare(b.sym));
   } else if (sortMode === "rankAsc") {
@@ -747,18 +752,22 @@ function updateWatchlistDisplay() {
   } else if (sortMode === "rankDesc") {
     resultList.sort((a, b) => getZoneWeight(priceZone(b.last)) - getZoneWeight(priceZone(a.last)));
   } else if (sortMode === "nearAsc") {
-    // 最近 ➔ 最遠（差距絕對值小的排前面）
+    // 距離最近 ➔ 最遠（百分比小的排前面，例如 0.32% -> 0.47% -> 1.67% -> 8.64%）
     resultList.sort((a, b) => {
       const nearA = getNearestLevel(a.last);
       const nearB = getNearestLevel(b.last);
-      return Math.abs(nearA.pct) - Math.abs(nearB.pct);
+      const pctA = nearA ? nearA.pct : 999;
+      const pctB = nearB ? nearB.pct : 999;
+      return pctA - pctB;
     });
   } else if (sortMode === "nearDesc") {
-    // 最遠 ➔ 最近（差距絕對值大的排前面）
+    // 距離最遠 ➔ 最近（百分比大的排前面）
     resultList.sort((a, b) => {
       const nearA = getNearestLevel(a.last);
       const nearB = getNearestLevel(b.last);
-      return Math.abs(nearB.pct) - Math.abs(nearA.pct);
+      const pctA = nearA ? nearA.pct : 0;
+      const pctB = nearB ? nearB.pct : 0;
+      return pctB - pctA;
     });
   }
 
