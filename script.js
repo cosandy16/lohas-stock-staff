@@ -156,6 +156,43 @@ const levelDefs = [
   { key: "minus2", label: "-2SD 悲觀線", color: "#12614a" },
 ];
 
+// 💡 計算離現價最近的線與相差金額/百分比
+function getNearestLevel(p) {
+  const currentPrice = p.close;
+  let nearest = null;
+  let minDiff = Infinity;
+
+  levelDefs.forEach(l => {
+    const levelPrice = p[l.key];
+    const absDiff = Math.abs(currentPrice - levelPrice);
+    if (absDiff < minDiff) {
+      minDiff = absDiff;
+      const diffVal = levelPrice - currentPrice;
+      const pct = (diffVal / currentPrice) * 100;
+      nearest = {
+        label: l.label,
+        key: l.key,
+        color: l.color,
+        price: levelPrice,
+        diff: diffVal,
+        absDiff: absDiff,
+        pct: pct
+      };
+    }
+  });
+  return nearest;
+}
+
+// 💡 格式化提示文字
+function formatNearestText(nearest) {
+  if (!nearest) return "";
+  const sign = nearest.diff >= 0 ? "漲" : "跌";
+  const absDiff = Math.abs(nearest.diff).toFixed(2);
+  const absPct = Math.abs(nearest.pct).toFixed(2);
+  const cleanLabel = nearest.label.replace(/^[\+\-]\dSD\s*/, "");
+  return `距 ${cleanLabel} (${formatPrice(nearest.price)}) 還差 ${sign} ${absDiff} 元 (${absPct}%)`;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const savedWatchlist = localStorage.getItem("lohas_watchlist");
   if (savedWatchlist) {
@@ -261,7 +298,7 @@ btnRemoveWatchlistSingle.addEventListener("click", () => {
   
   const filtered = syms.filter(s => s !== toRemove);
   watchlistInput.value = filtered.join(", ");
-  localStorage.setItem("lohas_watchlist", watchlistInput.value);
+  localStorage.setItem("lohas_watchlist", filtered.join(", "));
   
   updateRemoveSelect();
   watchlistStatus.textContent = `➖ 已刪除 ${toRemove}`;
@@ -518,6 +555,14 @@ function render() {
     if (zoneText) {
       zoneText.textContent = priceZone(last);
       zoneText.style.color = (last.close >= last.plus2) ? "#c94b4b" : (last.close <= last.minus2 ? "#12614a" : "var(--ink)");
+      
+      const nearest = getNearestLevel(last);
+      const nearestText = formatNearestText(nearest);
+      const nearestEl = document.querySelector("#nearestText");
+      if (nearestEl) {
+        nearestEl.textContent = nearestText;
+        nearestEl.style.color = nearest.diff >= 0 ? "#c94b4b" : "#1f8a63";
+      }
     }
     if (closeText) closeText.textContent = formatPrice(last.raw_close || last.close);
     if (r2Text) r2Text.textContent = last.r2.toFixed(3);
@@ -585,7 +630,6 @@ async function loadMainChipData(symbol) {
   }
 }
 
-// 💡 併行抓取 K線與三大法人籌碼 API
 async function fetchLevelForWatchlist(symbol) {
   let finalSym = symbol.trim().toUpperCase();
   if (!finalSym.includes(".") && /^\d+$/.test(finalSym)) finalSym += ".TW";
@@ -615,7 +659,6 @@ async function fetchLevelForWatchlist(symbol) {
   };
 }
 
-// 手動更新邏輯（併行請求 + Promise.allSettled 防爆機制）
 btnWatchlist.addEventListener("click", async () => {
   const rawInput = watchlistInput.value;
   localStorage.setItem("lohas_watchlist", rawInput);
@@ -676,7 +719,6 @@ btnWatchlist.addEventListener("click", async () => {
   }
 });
 
-// 💡 渲染清單卡片（含三大法人籌碼數據）
 function updateWatchlistDisplay() {
   if (scannedWatchlistCache.length === 0) return;
 
@@ -747,6 +789,9 @@ function updateWatchlistDisplay() {
       chipSummary = `三大法人: <strong style="color:${chipColor}">${sign}${total.toLocaleString()} 張</strong>`;
     }
 
+    const nearest = getNearestLevel(item.last);
+    const nearestHint = formatNearestText(nearest);
+
     card.innerHTML = `
       <div>
         <strong>${item.sym}</strong>${item.name ? `<span style="color:#555; font-size:0.85em; margin-left:6px;">${item.name}</span>` : ""}<br>
@@ -764,6 +809,8 @@ function updateWatchlistDisplay() {
         <span style="font-weight:900; color:${zoneColor}">${priceZone(item.last)}</span>
         <br>
         <small style="color:${smallTextColor}">區間: ${getPriceRangeDesc(item.last)}</small>
+        <br>
+        <small style="color:var(--blue); font-weight:bold; font-size: 0.78rem;">📌 ${nearestHint}</small>
       </div>
     `;
 
