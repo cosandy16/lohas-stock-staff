@@ -739,7 +739,7 @@ function updateWatchlistDisplay() {
     return matchSearch && matchZone;
   });
 
-  // 💡 排序邏輯（含距離最近線排序）
+  // 💡 排序邏輯（以離線距離的「絕對值 Math.abs」來排序）
   if (sortMode === "code") {
     resultList.sort((a, b) => a.sym.localeCompare(b.sym));
   } else if (sortMode === "rankAsc") {
@@ -747,12 +747,14 @@ function updateWatchlistDisplay() {
   } else if (sortMode === "rankDesc") {
     resultList.sort((a, b) => getZoneWeight(priceZone(b.last)) - getZoneWeight(priceZone(a.last)));
   } else if (sortMode === "nearAsc") {
+    // 最近 ➔ 最遠（差距絕對值小的排前面）
     resultList.sort((a, b) => {
       const nearA = getNearestLevel(a.last);
       const nearB = getNearestLevel(b.last);
       return Math.abs(nearA.pct) - Math.abs(nearB.pct);
     });
   } else if (sortMode === "nearDesc") {
+    // 最遠 ➔ 最近（差距絕對值大的排前面）
     resultList.sort((a, b) => {
       const nearA = getNearestLevel(a.last);
       const nearB = getNearestLevel(b.last);
