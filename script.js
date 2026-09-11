@@ -188,11 +188,11 @@ function getNearestDistance(p) {
 
 function formatNearestText(nearest) {
   if (!nearest || !nearest.label) return "";
-  const sign = nearest.diff >= 0 ? "多" : "少";
+  const sign = nearest.diff >= 0 ? "高" : "低";
   const absDiff = Math.abs(nearest.diff).toFixed(2);
   const absPct = Math.abs(nearest.pct).toFixed(2);
   const cleanLabel = nearest.label.replace(/^[\+\-]\dSD\s*/, "");
-  return `距 ${cleanLabel} (${formatPrice(nearest.price)}) 還差 ${sign} ${absDiff} 元 (${absPct}%)`;
+  return `距 ${cleanLabel} (${formatPrice(nearest.price)}) 還 ${sign} ${absDiff} 元 (${absPct}%)`;
 }
 
 document.addEventListener("DOMContentLoaded", () => {
