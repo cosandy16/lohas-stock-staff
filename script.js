@@ -156,6 +156,7 @@ const levelDefs = [
   { key: "minus2", label: "-2SD 悲觀線", color: "#12614a" },
 ];
 
+// 💡 修正 1：確保精準算出距離目標線的絕對距離與百分比
 function getNearestLevel(p) {
   if (!p) return null;
   const currentPrice = p.close;
@@ -180,7 +181,7 @@ function getNearestLevel(p) {
         price: levelPrice,
         diff: diffVal,
         absDiff: absDiff,
-        pct: pct // 這裡保證是正數的距離百分比
+        pct: pct // 保證是正數的距離百分比
       };
     }
   });
@@ -744,7 +745,7 @@ function updateWatchlistDisplay() {
     return matchSearch && matchZone;
   });
 
-// 💡 排序邏輯修正：確保取得正確百分比並以絕對差距排序
+  // 💡 修正 2：確保取得正確百分比並進行數值安全比較
   if (sortMode === "code") {
     resultList.sort((a, b) => a.sym.localeCompare(b.sym));
   } else if (sortMode === "rankAsc") {
@@ -752,21 +753,21 @@ function updateWatchlistDisplay() {
   } else if (sortMode === "rankDesc") {
     resultList.sort((a, b) => getZoneWeight(priceZone(b.last)) - getZoneWeight(priceZone(a.last)));
   } else if (sortMode === "nearAsc") {
-    // 距離最近 ➔ 最遠（百分比小的排前面，例如 0.32% -> 0.47% -> 1.67% -> 8.64%）
+    // 距離最近 ➔ 最遠（百分比小的排前面：0.32% -> 0.47% -> 1.66% -> 8.64%）
     resultList.sort((a, b) => {
       const nearA = getNearestLevel(a.last);
       const nearB = getNearestLevel(b.last);
-      const pctA = nearA ? nearA.pct : 999;
-      const pctB = nearB ? nearB.pct : 999;
+      const pctA = (nearA && !isNaN(nearA.pct)) ? nearA.pct : 999;
+      const pctB = (nearB && !isNaN(nearB.pct)) ? nearB.pct : 999;
       return pctA - pctB;
     });
   } else if (sortMode === "nearDesc") {
-    // 距離最遠 ➔ 最近（百分比大的排前面）
+    // 距離最遠 ➔ 最近（百分比大的排前面：12.94% -> 8.64% -> 1.66% -> 0.32%）
     resultList.sort((a, b) => {
       const nearA = getNearestLevel(a.last);
       const nearB = getNearestLevel(b.last);
-      const pctA = nearA ? nearA.pct : 0;
-      const pctB = nearB ? nearB.pct : 0;
+      const pctA = (nearA && !isNaN(nearA.pct)) ? nearA.pct : -1;
+      const pctB = (nearB && !isNaN(nearB.pct)) ? nearB.pct : -1;
       return pctB - pctA;
     });
   }
