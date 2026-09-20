@@ -1,3 +1,10 @@
+// ==========================================
+// 樂活通道 / 股票觀察清單 腳本 (script.js)
+// ==========================================
+
+// ------------------------------------------
+// 1. 靜態資料字典與基本面資料
+// ------------------------------------------
 const TW_STOCK_NAMES = {
   "1101":"台泥","1102":"亞泥","1216":"統一","1301":"台塑","1303":"南亞","1326":"台化",
   "1402":"遠東新","1476":"儒鴻","1504":"東元","1590":"亞德客","1605":"華新",
@@ -83,28 +90,9 @@ const STOCK_FUNDAMENTALS = {
   "9939": { eps: 7.8, dividend: 5.5 }
 };
 
-function getFundamentals(symbol, currentPrice) {
-  if (!symbol) return { eps: 10, dividend: 4 };
-  const code = symbol.replace(/\.(TW|TWO)$/i, "").toUpperCase();
-  if (STOCK_FUNDAMENTALS[code]) {
-    return STOCK_FUNDAMENTALS[code];
-  }
-  const estimatedEps = +(currentPrice / 16).toFixed(2);
-  const estimatedDiv = +(currentPrice * 0.04).toFixed(2);
-  return { eps: estimatedEps, dividend: estimatedDiv };
-}
-
-function getStockName(symbol) {
-  if (!symbol) return "";
-  const code = symbol.replace(/\.(TW|TWO)$/i, "").toUpperCase();
-  return TW_STOCK_NAMES[code] || "";
-}
-
-function formatSymbolDisplay(symbol) {
-  const name = getStockName(symbol);
-  return name ? `${symbol} ${name}` : symbol;
-}
-
+// ------------------------------------------
+// 2. DOM 元素選取與全域變數
+// ------------------------------------------
 const csvInput = document.querySelector("#csvInput");
 const market = document.querySelector("#market");
 const symbolInput = document.querySelector("#symbolInput");
@@ -114,6 +102,8 @@ const periodYears = document.querySelector("#periodYears");
 const modelMode = document.querySelector("#modelMode");
 const chart = document.querySelector("#chart");
 const chartTitle = document.querySelector("#chartTitle");
+const btnAddToWatchlist = document.querySelector("#btnAddToWatchlist");
+
 const rangeText = document.querySelector("#rangeText");
 const zoneText = document.querySelector("#zoneText");
 const closeText = document.querySelector("#closeText");
@@ -151,6 +141,31 @@ const levelDefs = [
   { key: "minus1", label: "-1SD 相對悲觀線", color: "#1f8a63" },
   { key: "minus2", label: "-2SD 悲觀線", color: "#12614a" },
 ];
+
+// ------------------------------------------
+// 3. 通用工具與計算函式
+// ------------------------------------------
+function getFundamentals(symbol, currentPrice) {
+  if (!symbol) return { eps: 10, dividend: 4 };
+  const code = symbol.replace(/\.(TW|TWO)$/i, "").toUpperCase();
+  if (STOCK_FUNDAMENTALS[code]) {
+    return STOCK_FUNDAMENTALS[code];
+  }
+  const estimatedEps = +(currentPrice / 16).toFixed(2);
+  const estimatedDiv = +(currentPrice * 0.04).toFixed(2);
+  return { eps: estimatedEps, dividend: estimatedDiv };
+}
+
+function getStockName(symbol) {
+  if (!symbol) return "";
+  const code = symbol.replace(/\.(TW|TWO)$/i, "").toUpperCase();
+  return TW_STOCK_NAMES[code] || "";
+}
+
+function formatSymbolDisplay(symbol) {
+  const name = getStockName(symbol);
+  return name ? `${symbol} ${name}` : symbol;
+}
 
 function getNearestLevel(p) {
   if (!p) return { label: "", price: 0, diff: 0, pct: 999 };
@@ -195,192 +210,6 @@ function formatNearestText(nearest) {
   return `距 ${cleanLabel} (${formatPrice(nearest.price)}) 還 ${sign} ${absDiff} 元 (${absPct}%)`;
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  const savedWatchlist = localStorage.getItem("lohas_watchlist");
-  if (savedWatchlist) {
-    watchlistInput.value = savedWatchlist;
-  }
-
-  const savedLastSymbol = localStorage.getItem("lohas_last_symbol");
-  const savedLastMarket = localStorage.getItem("lohas_last_market");
-  if (savedLastSymbol) symbolInput.value = savedLastSymbol;
-  if (savedLastMarket) market.value = savedLastMarket;
-
-  updateRemoveSelect();
-
-  if (watchlistSearch) watchlistSearch.addEventListener("input", updateWatchlistDisplay);
-  if (watchlistFilterZone) watchlistFilterZone.addEventListener("change", updateWatchlistDisplay);
-  if (watchlistSort) watchlistSort.addEventListener("change", updateWatchlistDisplay);
-
-  loadWatchlistFromCache();
-});
-
-function loadWatchlistFromCache() {
-  const cachedData = localStorage.getItem("lohas_watchlist_cache_data");
-  const cachedTime = localStorage.getItem("lohas_watchlist_cache_time");
-
-  if (cachedData && cachedTime) {
-    try {
-      scannedWatchlistCache = JSON.parse(cachedData);
-      updateWatchlistDisplay();
-      watchlistStatus.textContent = `📁 上次暫存 (儲存於 ${cachedTime})`;
-      watchlistStatus.style.color = "#64748b";
-    } catch (e) {
-      console.error("讀取快取失敗", e);
-    }
-  }
-}
-
-function updateRemoveSelect() {
-  if (!removeWatchlistSelect) return;
-  const currentText = watchlistInput.value || "";
-  const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
-  
-  removeWatchlistSelect.innerHTML = "";
-  if (syms.length === 0) {
-    const opt = document.createElement("option");
-    opt.value = "";
-    opt.textContent = "📭 清單為空";
-    removeWatchlistSelect.appendChild(opt);
-    return;
-  }
-  
-  syms.forEach(sym => {
-    const opt = document.createElement("option");
-    opt.value = sym;
-    opt.textContent = sym;
-    removeWatchlistSelect.appendChild(opt);
-  });
-}
-
-if (btnAddWatchlistSingle) {
-  btnAddWatchlistSingle.addEventListener("click", async () => {
-    const newSym = addWatchlistInput.value.trim().toUpperCase();
-    if (!newSym) return;
-    
-    const currentText = watchlistInput.value || "";
-    const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
-    
-    if (syms.includes(newSym)) {
-      watchlistStatus.textContent = `⚠️ 股號 ${newSym} 已在清單中！`;
-      return;
-    }
-    
-    if (syms.length >= 25) {
-      watchlistStatus.textContent = "⚠️ 監控清單最多只能 25 支股票喔！";
-      return;
-    }
-    
-    syms.push(newSym);
-    watchlistInput.value = syms.join(", ");
-    localStorage.setItem("lohas_watchlist", watchlistInput.value);
-    addWatchlistInput.value = "";
-    
-    updateRemoveSelect();
-    watchlistStatus.textContent = `➕ 正在即時新增並計算 ${newSym}...`;
-    
-    try {
-      const data = await fetchLevelForWatchlist(newSym);
-      scannedWatchlistCache.push(data);
-      updateWatchlistDisplay();
-      
-      saveWatchlistCache();
-      watchlistStatus.textContent = `✅ 已成功新增 ${newSym}！`;
-      watchlistStatus.style.color = "var(--blue)";
-    } catch (err) {
-      watchlistStatus.textContent = `❌ 即時新增 ${newSym} 失敗，請點擊「執行批量更新」。`;
-    }
-  });
-}
-
-if (btnRemoveWatchlistSingle) {
-  btnRemoveWatchlistSingle.addEventListener("click", () => {
-    const toRemove = removeWatchlistSelect.value;
-    if (!toRemove || toRemove === "📭 清單為空") return;
-    
-    const currentText = watchlistInput.value || "";
-    const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
-    
-    const filtered = syms.filter(s => s !== toRemove);
-    watchlistInput.value = filtered.join(", ");
-    localStorage.setItem("lohas_watchlist", filtered.join(", "));
-    
-    updateRemoveSelect();
-    watchlistStatus.textContent = `➖ 已刪除 ${toRemove}`;
-    watchlistStatus.style.color = "var(--blue)";
-    
-    scannedWatchlistCache = scannedWatchlistCache.filter(item => {
-      const symClean = item.sym.replace(".TW", "").replace(".TWO", "").toUpperCase();
-      return symClean !== toRemove;
-    });
-    updateWatchlistDisplay();
-    saveWatchlistCache();
-  });
-}
-
-function saveWatchlistCache() {
-  const nowStr = new Date().toLocaleString("zh-TW", { 
-    year: 'numeric', month: '2-digit', day: '2-digit', 
-    hour: '2-digit', minute: '2-digit', hour12: false 
-  });
-  localStorage.setItem("lohas_watchlist_cache_data", JSON.stringify(scannedWatchlistCache));
-  localStorage.setItem("lohas_watchlist_cache_time", nowStr);
-}
-
-function regression(values) {
-  const n = values.length;
-  const sumX = values.reduce((s, p) => s + p.x, 0);
-  const sumY = values.reduce((s, p) => s + p.y, 0);
-  const meanX = sumX / n;
-  const meanY = sumY / n;
-  let num = 0, den = 0;
-  for (const p of values) {
-    num += (p.x - meanX) * (p.y - meanY);
-    den += (p.x - meanX) ** 2;
-  }
-  const slope = den === 0 ? 0 : num / den;
-  const intercept = meanY - slope * meanX;
-  const fitted = values.map(p => intercept + slope * p.x);
-  const residuals = values.map((p, i) => p.y - fitted[i]);
-  const sd = Math.sqrt(residuals.reduce((s, r) => s + r ** 2, 0) / (n - 2 || 1));
-  const ssTot = values.reduce((s, p) => s + (p.y - meanY) ** 2, 0);
-  const ssRes = residuals.reduce((s, r) => s + r ** 2, 0);
-  const r2 = ssTot === 0 ? 1 : Math.max(0, 1 - ssRes / ssTot);
-  return { intercept, slope, sd, r2 };
-}
-
-function buildAnalysis(data, currentMode = modelMode.value, currentYears = periodYears.value) {
-  const years = (currentYears === "all") ? 10 : Number(currentYears);
-  const lastDate = new Date(data[data.length - 1].date);
-  const cutoff = new Date(lastDate);
-  cutoff.setDate(cutoff.getDate() - Math.round(years * 365));
-  const filtered = data.filter(p => new Date(p.date) >= cutoff);
-  if (filtered.length < 10) throw new Error("資料不足");
-  
-  const startTime = new Date(filtered[0].date).getTime();
-  const useLog = currentMode === "log";
-  const points = filtered.map(p => ({
-    ...p,
-    x: (new Date(p.date).getTime() - startTime) / 86400000,
-    y: useLog ? Math.log(p.close) : p.close
-  }));
-
-  const fit = regression(points);
-  return points.map(p => {
-    const midRaw = fit.intercept + fit.slope * p.x;
-    const conv = (v) => useLog ? Math.exp(v) : v;
-    return {
-      ...p,
-      plus2: conv(midRaw + fit.sd * 2),
-      plus1: conv(midRaw + fit.sd),
-      mid: conv(midRaw),
-      minus1: conv(midRaw - fit.sd),
-      minus2: conv(midRaw - fit.sd * 2),
-      r2: fit.r2
-    };
-  });
-}
-
 function priceZone(p) {
   if (!p) return "";
   if (p.close >= p.plus2) return "樂觀區上緣";
@@ -418,7 +247,140 @@ function formatPrice(v) {
   return Number(v || 0).toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); 
 }
 
+// ------------------------------------------
+// 4. 初始化與快取管理
+// ------------------------------------------
+document.addEventListener("DOMContentLoaded", () => {
+  const savedWatchlist = localStorage.getItem("lohas_watchlist");
+  if (savedWatchlist && watchlistInput) {
+    watchlistInput.value = savedWatchlist;
+  }
+
+  const savedLastSymbol = localStorage.getItem("lohas_last_symbol");
+  const savedLastMarket = localStorage.getItem("lohas_last_market");
+  if (savedLastSymbol && symbolInput) symbolInput.value = savedLastSymbol;
+  if (savedLastMarket && market) market.value = savedLastMarket;
+
+  updateRemoveSelect();
+
+  if (watchlistSearch) watchlistSearch.addEventListener("input", updateWatchlistDisplay);
+  if (watchlistFilterZone) watchlistFilterZone.addEventListener("change", updateWatchlistDisplay);
+  if (watchlistSort) watchlistSort.addEventListener("change", updateWatchlistDisplay);
+
+  loadWatchlistFromCache();
+});
+
+function loadWatchlistFromCache() {
+  const cachedData = localStorage.getItem("lohas_watchlist_cache_data");
+  const cachedTime = localStorage.getItem("lohas_watchlist_cache_time");
+
+  if (cachedData && cachedTime) {
+    try {
+      scannedWatchlistCache = JSON.parse(cachedData);
+      updateWatchlistDisplay();
+      if (watchlistStatus) {
+        watchlistStatus.textContent = `📁 上次暫存 (儲存於 ${cachedTime})`;
+        watchlistStatus.style.color = "#64748b";
+      }
+    } catch (e) {
+      console.error("讀取快取失敗", e);
+    }
+  }
+}
+
+function saveWatchlistCache() {
+  const nowStr = new Date().toLocaleString("zh-TW", { 
+    year: 'numeric', month: '2-digit', day: '2-digit', 
+    hour: '2-digit', minute: '2-digit', hour12: false 
+  });
+  localStorage.setItem("lohas_watchlist_cache_data", JSON.stringify(scannedWatchlistCache));
+  localStorage.setItem("lohas_watchlist_cache_time", nowStr);
+}
+
+function updateRemoveSelect() {
+  if (!removeWatchlistSelect) return;
+  const currentText = watchlistInput.value || "";
+  const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+  
+  removeWatchlistSelect.innerHTML = "";
+  if (syms.length === 0) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "📭 清單為空";
+    removeWatchlistSelect.appendChild(opt);
+    return;
+  }
+  
+  syms.forEach(sym => {
+    const opt = document.createElement("option");
+    opt.value = sym;
+    opt.textContent = sym;
+    removeWatchlistSelect.appendChild(opt);
+  });
+}
+
+// ------------------------------------------
+// 5. 迴歸分析與通道計算
+// ------------------------------------------
+function regression(values) {
+  const n = values.length;
+  const sumX = values.reduce((s, p) => s + p.x, 0);
+  const sumY = values.reduce((s, p) => s + p.y, 0);
+  const meanX = sumX / n;
+  const meanY = sumY / n;
+  let num = 0, den = 0;
+  for (const p of values) {
+    num += (p.x - meanX) * (p.y - meanY);
+    den += (p.x - meanX) ** 2;
+  }
+  const slope = den === 0 ? 0 : num / den;
+  const intercept = meanY - slope * meanX;
+  const fitted = values.map(p => intercept + slope * p.x);
+  const residuals = values.map((p, i) => p.y - fitted[i]);
+  const sd = Math.sqrt(residuals.reduce((s, r) => s + r ** 2, 0) / (n - 2 || 1));
+  const ssTot = values.reduce((s, p) => s + (p.y - meanY) ** 2, 0);
+  const ssRes = residuals.reduce((s, r) => s + r ** 2, 0);
+  const r2 = ssTot === 0 ? 1 : Math.max(0, 1 - ssRes / ssTot);
+  return { intercept, slope, sd, r2 };
+}
+
+function buildAnalysis(data, currentMode = (modelMode ? modelMode.value : "linear"), currentYears = (periodYears ? periodYears.value : "3.5")) {
+  const years = (currentYears === "all") ? 10 : Number(currentYears);
+  const lastDate = new Date(data[data.length - 1].date);
+  const cutoff = new Date(lastDate);
+  cutoff.setDate(cutoff.getDate() - Math.round(years * 365));
+  const filtered = data.filter(p => new Date(p.date) >= cutoff);
+  if (filtered.length < 10) throw new Error("資料不足");
+  
+  const startTime = new Date(filtered[0].date).getTime();
+  const useLog = currentMode === "log";
+  const points = filtered.map(p => ({
+    ...p,
+    x: (new Date(p.date).getTime() - startTime) / 86400000,
+    y: useLog ? Math.log(p.close) : p.close
+  }));
+
+  const fit = regression(points);
+  return points.map(p => {
+    const midRaw = fit.intercept + fit.slope * p.x;
+    const conv = (v) => useLog ? Math.exp(v) : v;
+    return {
+      ...p,
+      plus2: conv(midRaw + fit.sd * 2),
+      plus1: conv(midRaw + fit.sd),
+      mid: conv(midRaw),
+      minus1: conv(midRaw - fit.sd),
+      minus2: conv(midRaw - fit.sd * 2),
+      r2: fit.r2
+    };
+  });
+}
+
+// ------------------------------------------
+// 6. 圖表渲染 (SVG + Tooltip)
+// ------------------------------------------
 function renderChart(analysis) {
+  if (!chart) return;
   const width = 1000, height = 500;
   const margin = { top: 35, right: 60, bottom: 45, left: 65 };
   const last = analysis[analysis.length - 1];
@@ -594,6 +556,9 @@ function render() {
   }
 }
 
+// ------------------------------------------
+// 7. API 資料抓取 (Chip & Yahoo)
+// ------------------------------------------
 async function loadMainChipData(symbol) {
   const chipEl = document.querySelector("#chipText");
   if (!chipEl) return;
@@ -667,6 +632,9 @@ async function fetchLevelForWatchlist(symbol) {
   };
 }
 
+// ------------------------------------------
+// 8. 觀察清單邏輯 (批量掃描 / 繪製卡片)
+// ------------------------------------------
 if (btnWatchlist) {
   btnWatchlist.addEventListener("click", async () => {
     const rawInput = watchlistInput.value;
@@ -729,7 +697,6 @@ if (btnWatchlist) {
   });
 }
 
-// 修正後的清單渲染與排序邏輯
 function updateWatchlistDisplay() {
   if (!scannedWatchlistCache || scannedWatchlistCache.length === 0) return;
 
@@ -751,7 +718,6 @@ function updateWatchlistDisplay() {
     return matchSearch && matchZone;
   });
 
-  // 排序核心修正點
   resultList.sort((a, b) => {
     if (sortMode === "code") {
       return a.sym.localeCompare(b.sym);
@@ -854,6 +820,169 @@ function updateWatchlistDisplay() {
   });
 }
 
+// ------------------------------------------
+// 9. 個股查詢與單一操作邏輯
+// ------------------------------------------
+if (fetchSymbolBtn) {
+  fetchSymbolBtn.addEventListener("click", async () => {
+    fetchStatus.textContent = "讀取中...";
+    let inputVal = symbolInput.value.trim().toUpperCase();
+    let selectedMarket = market.value;
+
+    try {
+      const p = new URLSearchParams({ 
+        symbol: inputVal, 
+        market: selectedMarket, 
+        years: periodYears.value 
+      });
+      
+      const res = await fetch(`/api/yahoo?${p.toString()}`);
+      if (!res.ok) throw new Error();
+      const json = await res.json();
+      csvInput.value = JSON.stringify(json.rows);
+      
+      if (chartTitle) {
+        chartTitle.textContent = formatSymbolDisplay(json.symbol);
+      }
+      
+      // 成功載入股票後，顯示「加入觀察清單」按鈕
+      if (btnAddToWatchlist) {
+        btnAddToWatchlist.style.display = "inline-block";
+      }
+
+      loadMainChipData(inputVal);
+      render();
+
+      fetchStatus.textContent = "成功";
+      localStorage.setItem("lohas_last_symbol", inputVal);
+      localStorage.setItem("lohas_last_market", selectedMarket);
+    } catch (err) { 
+      fetchStatus.textContent = "失敗"; 
+      console.error("Fetch 錯誤資訊:", err);
+    }
+  });
+}
+
+// ------------------------------------------
+// 10.【功能一】：圖表標題旁「⭐ 加入觀察清單」按鈕
+// ------------------------------------------
+if (btnAddToWatchlist) {
+  btnAddToWatchlist.addEventListener("click", async () => {
+    const rawSym = symbolInput.value.trim().toUpperCase();
+    if (!rawSym) {
+      alert("⚠️ 請先輸入股票代碼！");
+      return;
+    }
+
+    const currentText = watchlistInput.value || "";
+    const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+
+    if (syms.includes(rawSym)) {
+      alert(`⚠️ 股號 ${rawSym} 已在觀察清單中！`);
+      return;
+    }
+
+    if (syms.length >= 25) {
+      alert("⚠️ 觀察清單最多只能 25 支股票！");
+      return;
+    }
+
+    // 加入清單並更新 UI 與 LocalStorage
+    syms.push(rawSym);
+    watchlistInput.value = syms.join(", ");
+    localStorage.setItem("lohas_watchlist", watchlistInput.value);
+
+    updateRemoveSelect();
+    
+    // 即時計算並加入快取
+    try {
+      const data = await fetchLevelForWatchlist(rawSym);
+      scannedWatchlistCache = scannedWatchlistCache.filter(item => {
+        const symClean = item.sym.replace(".TW", "").replace(".TWO", "").toUpperCase();
+        return symClean !== rawSym;
+      });
+      scannedWatchlistCache.push(data);
+      updateWatchlistDisplay();
+      saveWatchlistCache();
+      alert(`✅ 已成功將 ${rawSym} 加入觀察清單！`);
+    } catch (err) {
+      alert(`✅ 已將 ${rawSym} 加入清單，請至下方點擊「執行批量掃描更新」。`);
+    }
+  });
+}
+
+// ------------------------------------------
+// 11. 單一新增 / 刪除個股邏輯
+// ------------------------------------------
+if (btnAddWatchlistSingle) {
+  btnAddWatchlistSingle.addEventListener("click", async () => {
+    const newSym = addWatchlistInput.value.trim().toUpperCase();
+    if (!newSym) return;
+    
+    const currentText = watchlistInput.value || "";
+    const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+    
+    if (syms.includes(newSym)) {
+      watchlistStatus.textContent = `⚠️ 股號 ${newSym} 已在清單中！`;
+      return;
+    }
+    
+    if (syms.length >= 25) {
+      watchlistStatus.textContent = "⚠️ 監控清單最多只能 25 支股票喔！";
+      return;
+    }
+    
+    syms.push(newSym);
+    watchlistInput.value = syms.join(", ");
+    localStorage.setItem("lohas_watchlist", watchlistInput.value);
+    addWatchlistInput.value = "";
+    
+    updateRemoveSelect();
+    watchlistStatus.textContent = `➕ 正在即時新增並計算 ${newSym}...`;
+    
+    try {
+      const data = await fetchLevelForWatchlist(newSym);
+      scannedWatchlistCache = scannedWatchlistCache.filter(item => {
+        const symClean = item.sym.replace(".TW", "").replace(".TWO", "").toUpperCase();
+        return symClean !== newSym;
+      });
+      scannedWatchlistCache.push(data);
+      updateWatchlistDisplay();
+      
+      saveWatchlistCache();
+      watchlistStatus.textContent = `✅ 已成功新增 ${newSym}！`;
+      watchlistStatus.style.color = "var(--blue)";
+    } catch (err) {
+      watchlistStatus.textContent = `❌ 即時新增 ${newSym} 失敗，請點擊「執行批量更新」。`;
+    }
+  });
+}
+
+if (btnRemoveWatchlistSingle) {
+  btnRemoveWatchlistSingle.addEventListener("click", () => {
+    const toRemove = removeWatchlistSelect.value;
+    if (!toRemove || toRemove === "📭 清單為空") return;
+    
+    const currentText = watchlistInput.value || "";
+    const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+    
+    const filtered = syms.filter(s => s !== toRemove);
+    watchlistInput.value = filtered.join(", ");
+    localStorage.setItem("lohas_watchlist", filtered.join(", "));
+    
+    updateRemoveSelect();
+    watchlistStatus.textContent = `➖ 已刪除 ${toRemove}`;
+    watchlistStatus.style.color = "var(--blue)";
+    
+    scannedWatchlistCache = scannedWatchlistCache.filter(item => {
+      const symClean = item.sym.replace(".TW", "").replace(".TWO", "").toUpperCase();
+      return symClean !== toRemove;
+    });
+    updateWatchlistDisplay();
+    saveWatchlistCache();
+  });
+}
+
 if (btnClearWatchlist) {
   btnClearWatchlist.addEventListener("click", () => {
     if (btnClearWatchlist.textContent.includes("全部清除")) {
@@ -884,84 +1013,93 @@ if (btnClearWatchlist) {
   });
 }
 
+// ------------------------------------------
+// 12.【功能二 (方案二)】：複製與智慧併集合併匯入
+// ------------------------------------------
 if (btnExportWatchlist) {
   btnExportWatchlist.addEventListener("click", (e) => {
     e.preventDefault();
     const currentText = watchlistInput.value.trim();
     if (!currentText) {
-      watchlistStatus.textContent = "⚠️ 目前清單是空的，無法匯出喔！";
+      if (watchlistStatus) watchlistStatus.textContent = "⚠️ 目前清單是空的，無法複製喔！";
       return;
     }
-    navigator.clipboard.writeText(currentText).then(() => {
-      watchlistStatus.textContent = "📋 清單已自動複製到剪貼簿！可貼至記事本備份。";
-    }).catch(() => {
-      watchlistStatus.textContent = "❌ 複製失敗，請手動複製輸入框文字。";
-    });
+    
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(currentText).then(() => {
+        if (watchlistStatus) watchlistStatus.textContent = "📋 清單已自動複製到剪貼簿！可傳送至手機/其他裝置匯入。";
+      }).catch(() => {
+        watchlistInput.select();
+        document.execCommand("copy");
+        if (watchlistStatus) watchlistStatus.textContent = "📋 清單已複製到剪貼簿！";
+      });
+    } else {
+      watchlistInput.select();
+      document.execCommand("copy");
+      if (watchlistStatus) watchlistStatus.textContent = "📋 清單已複製到剪貼簿！";
+    }
   });
 }
 
 if (btnImportWatchlist) {
   btnImportWatchlist.addEventListener("click", (e) => {
     e.preventDefault();
-    const userInput = prompt("請貼上您先前匯出的股票代號（請用逗點隔開）：");
+    const userInput = prompt("請貼上您要匯入的股票代號（例如: 2330, 2317, 2454）：");
     if (userInput === null) return;
-    const cleanedInput = userInput.trim();
-    if (!cleanedInput) {
-      alert("輸入內容為空，取消匯入。");
+    
+    // 1. 取得現有清單
+    const existingSyms = (watchlistInput.value || "")
+      .split(",")
+      .map(s => s.trim().toUpperCase())
+      .filter(s => s);
+
+    // 2. 取得新輸入清單
+    const importedSyms = userInput
+      .split(",")
+      .map(s => s.trim().toUpperCase())
+      .filter(s => s);
+
+    if (importedSyms.length === 0) {
+      alert("⚠️ 輸入內容無有效股票代碼！");
       return;
     }
-    watchlistInput.value = cleanedInput;
-    localStorage.setItem("lohas_watchlist", cleanedInput);
-    watchlistResult.innerHTML = "";
-    scannedWatchlistCache = [];
-    watchlistStatus.textContent = "📥 歷史清單匯入成功！點擊下方按鈕即可重新更新。";
-    updateRemoveSelect();
-  });
-}
 
-if (fetchSymbolBtn) {
-  fetchSymbolBtn.addEventListener("click", async () => {
-    fetchStatus.textContent = "讀取中...";
-    let inputVal = symbolInput.value.trim().toUpperCase();
-    let selectedMarket = market.value;
+    // 3. 智慧併集合併 (自動去重，保留舊的，加上新的)
+    const mergedSet = new Set([...existingSyms, ...importedSyms]);
+    const mergedList = Array.from(mergedSet);
 
-    try {
-      const p = new URLSearchParams({ 
-        symbol: inputVal, 
-        market: selectedMarket, 
-        years: periodYears.value 
-      });
-      
-      const res = await fetch(`/api/yahoo?${p.toString()}`);
-      if (!res.ok) throw new Error();
-      const json = await res.json();
-      csvInput.value = JSON.stringify(json.rows);
-      
-      if (chartTitle) {
-        chartTitle.textContent = formatSymbolDisplay(json.symbol);
-      }
-      
-      loadMainChipData(inputVal);
-
-      render();
-      fetchStatus.textContent = "成功";
-      localStorage.setItem("lohas_last_symbol", inputVal);
-      localStorage.setItem("lohas_last_market", selectedMarket);
-    } catch (err) { 
-      fetchStatus.textContent = "失敗"; 
-      console.error("Fetch 錯誤資訊:", err);
+    if (mergedList.length > 25) {
+      alert("⚠️ 合併後數量超過 25 支上限，將自動截取保留前 25 支股票。");
+      mergedList.length = 25;
     }
+
+    // 4. 寫回 UI 與 LocalStorage
+    watchlistInput.value = mergedList.join(", ");
+    localStorage.setItem("lohas_watchlist", watchlistInput.value);
+
+    updateRemoveSelect();
+
+    const addedCount = mergedList.length - existingSyms.length;
+    if (watchlistStatus) {
+      watchlistStatus.textContent = `📥 併集合併完成！共 ${mergedList.length} 檔 (新增 ${addedCount > 0 ? addedCount : 0} 檔)。請點擊「執行批量掃描更新」。`;
+      watchlistStatus.style.color = "var(--blue)";
+    }
+    
+    alert(`✅ 清單併集合併成功！\n原清單: ${existingSyms.length} 支\n新增: ${addedCount > 0 ? addedCount : 0} 支\n合併後總計: ${mergedList.length} 支股票。\n\n請點擊「執行批量掃描更新」以載入最新數據。`);
   });
 }
 
+// ------------------------------------------
+// 13. 模擬範例數據按鈕
+// ------------------------------------------
 if (document.querySelector("#sampleBtn")) {
   document.querySelector("#sampleBtn").addEventListener("click", () => {
     const mock = []; 
     let p = 100;
-    for(let i=0; i<300; i++) {
+    for(let i = 0; i < 300; i++) {
       mock.push({ 
-        date: new Date(Date.now() - (300-i)*86400000).toISOString().split('T')[0], 
-        close: p += (Math.random()-0.48) 
+        date: new Date(Date.now() - (300 - i) * 86400000).toISOString().split('T')[0], 
+        close: p += (Math.random() - 0.48) 
       });
     }
     csvInput.value = JSON.stringify(mock);
@@ -969,48 +1107,3 @@ if (document.querySelector("#sampleBtn")) {
     render();
   });
 }
-
-// 在 script.js 終端或初始化區域加入以下程式碼：
-const btnAddToWatchlist = document.querySelector("#btnAddToWatchlist");
-
-if (btnAddToWatchlist) {
-  btnAddToWatchlist.addEventListener("click", async () => {
-    const rawSym = symbolInput.value.trim().toUpperCase();
-    if (!rawSym) return;
-
-    const currentText = watchlistInput.value || "";
-    const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
-
-    if (syms.includes(rawSym)) {
-      alert(`⚠️ 股號 ${rawSym} 已在觀察清單中！`);
-      return;
-    }
-
-    if (syms.length >= 25) {
-      alert("⚠️ 觀察清單最多只能 25 支股票！");
-      return;
-    }
-
-    // 加入清單並更新 UI
-    syms.push(rawSym);
-    watchlistInput.value = syms.join(", ");
-    localStorage.setItem("lohas_watchlist", watchlistInput.value);
-
-    updateRemoveSelect();
-    
-    // 即時計算並加入快取
-    try {
-      const data = await fetchLevelForWatchlist(rawSym);
-      scannedWatchlistCache.push(data);
-      updateWatchlistDisplay();
-      saveWatchlistCache();
-      alert(`✅ 已將 ${rawSym} 加入觀察清單！`);
-    } catch (err) {
-      alert(`✅ 已將 ${rawSym} 加入清單，請至下方點擊「執行批量掃描更新」。`);
-    }
-  });
-}
-
-// 修改 fetchSymbolBtn 的點擊成功邏輯（約 script.js 第 580 行處）：
-// 載入股票成功後顯示「加入觀察清單」按鈕
-if (btnAddToWatchlist) btnAddToWatchlist.style.display = "inline-block";
