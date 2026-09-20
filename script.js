@@ -969,3 +969,48 @@ if (document.querySelector("#sampleBtn")) {
     render();
   });
 }
+
+// 在 script.js 終端或初始化區域加入以下程式碼：
+const btnAddToWatchlist = document.querySelector("#btnAddToWatchlist");
+
+if (btnAddToWatchlist) {
+  btnAddToWatchlist.addEventListener("click", async () => {
+    const rawSym = symbolInput.value.trim().toUpperCase();
+    if (!rawSym) return;
+
+    const currentText = watchlistInput.value || "";
+    const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+
+    if (syms.includes(rawSym)) {
+      alert(`⚠️ 股號 ${rawSym} 已在觀察清單中！`);
+      return;
+    }
+
+    if (syms.length >= 25) {
+      alert("⚠️ 觀察清單最多只能 25 支股票！");
+      return;
+    }
+
+    // 加入清單並更新 UI
+    syms.push(rawSym);
+    watchlistInput.value = syms.join(", ");
+    localStorage.setItem("lohas_watchlist", watchlistInput.value);
+
+    updateRemoveSelect();
+    
+    // 即時計算並加入快取
+    try {
+      const data = await fetchLevelForWatchlist(rawSym);
+      scannedWatchlistCache.push(data);
+      updateWatchlistDisplay();
+      saveWatchlistCache();
+      alert(`✅ 已將 ${rawSym} 加入觀察清單！`);
+    } catch (err) {
+      alert(`✅ 已將 ${rawSym} 加入清單，請至下方點擊「執行批量掃描更新」。`);
+    }
+  });
+}
+
+// 修改 fetchSymbolBtn 的點擊成功邏輯（約 script.js 第 580 行處）：
+// 載入股票成功後顯示「加入觀察清單」按鈕
+if (btnAddToWatchlist) btnAddToWatchlist.style.display = "inline-block";

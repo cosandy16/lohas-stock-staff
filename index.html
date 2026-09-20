@@ -224,10 +224,13 @@
     <!-- 右側圖表與監控面板 -->
     <div>
       <div class="panel" style="margin-bottom:20px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-          <h2 id="chartTitle" style="margin:0;">請選擇股票</h2>
-          <small id="rangeText" style="color:var(--muted);"></small>
-        </div>
+		<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+		  <div style="display:flex; align-items:center; gap:10px;">
+			<h2 id="chartTitle" style="margin:0;">請選擇股票</h2>
+			<button id="btnAddToWatchlist" style="padding:4px 10px; font-size:0.82rem; background:#1f8a63; display:none;">⭐ 加入觀察清單</button>
+		  </div>
+		  <small id="rangeText" style="color:var(--muted);"></small>
+		</div>
 
         <div class="status-grid">
           <div class="status-card">
