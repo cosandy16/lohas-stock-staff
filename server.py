@@ -21,88 +21,6 @@ ssl_ctx.check_hostname = False
 ssl_ctx.verify_mode = ssl.CERT_NONE
 
 
-# ---------------------------------------------------------
-# 🇨🇳/🇹🇼 股票中文名稱庫 (方案 B：後端統一快取與查詢)
-# ---------------------------------------------------------
-STOCK_NAME_CACHE = {
-    "2330": "台積電",
-    "2317": "鴻海",
-    "2454": "聯發科",
-    "2308": "台達電",
-    "2382": "廣達",
-    "2881": "富邦金",
-    "2882": "國泰金",
-    "2891": "中信金",
-    "0050": "元大台灣50",
-    "0056": "元大高股息",
-    "00878": "國泰永續高股息",
-    "00919": "群益台灣精選高息",
-    "00929": "復華台灣科技優息",
-    "00940": "元大台灣價值高息"
-}
-HAS_LOADED_STOCK_NAMES = False
-
-
-def update_stock_names_from_openapi():
-    """向 TWSE / TPEx OpenData 撈取全台股（上市/上櫃）中文簡稱清單"""
-    global HAS_LOADED_STOCK_NAMES
-    if HAS_LOADED_STOCK_NAMES:
-        return
-
-    print("🔄 [後端方案 B] 正在向 TWSE / TPEx 載入全台股中文名稱清單...")
-
-    # 1. 上市股票/ETF
-    try:
-        url_twse = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
-        req = urllib.request.Request(url_twse, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=6, context=ssl_ctx) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            for item in data:
-                code = str(item.get("公司代號", "")).strip()
-                name = str(item.get("公司簡稱", "")).strip()
-                if code and name:
-                    STOCK_NAME_CACHE[code] = name
-    except Exception as e:
-        print(f"⚠️ [TWSE 名稱庫] 載入失敗: {e}")
-
-    # 2. 上櫃股票/ETF
-    try:
-        url_tpex = "https://openapi.twse.com.tw/v1/opendata/t187ap03_O"
-        req = urllib.request.Request(url_tpex, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=6, context=ssl_ctx) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            for item in data:
-                code = str(item.get("公司代號", "")).strip()
-                name = str(item.get("公司簡稱", "")).strip()
-                if code and name:
-                    STOCK_NAME_CACHE[code] = name
-    except Exception as e:
-        print(f"⚠️ [TPEX 名稱庫] 載入失敗: {e}")
-
-    HAS_LOADED_STOCK_NAMES = True
-    print(f"✅ [後端方案 B] 中文名稱庫更新完成，共收錄 {len(STOCK_NAME_CACHE)} 檔股票。")
-
-
-def get_stock_name(raw_symbol):
-    """根據代碼查詢中文名稱，若無則傳回原代碼"""
-    code = raw_symbol.split(".")[0].strip().upper()
-    
-    # 嘗試從快取讀取
-    if code in STOCK_NAME_CACHE:
-        return STOCK_NAME_CACHE[code]
-    
-    # 若快取尚末完整發送過請求，嘗試懶加載
-    if not HAS_LOADED_STOCK_NAMES:
-        update_stock_names_from_openapi()
-        if code in STOCK_NAME_CACHE:
-            return STOCK_NAME_CACHE[code]
-
-    return code
-
-
-# ---------------------------------------------------------
-# 工具函式
-# ---------------------------------------------------------
 def parse_number(value):
     cleaned = str(value).replace(",", "").strip()
     if cleaned in {"", "--", "X", "除權息", "None", "null"}:
@@ -146,6 +64,7 @@ def fetch_finmind_chip(symbol_code):
         if not data_list:
             return None
 
+        # 依日期彙整三大法人買進與賣出張數 (單位為股)
         by_date = {}
         for row in data_list:
             d = row.get("date")
@@ -176,9 +95,11 @@ def fetch_finmind_chip(symbol_code):
         if not by_date:
             return None
 
+        # 取得最新的交易日籌碼
         latest_date = sorted(by_date.keys())[-1]
         chip = by_date[latest_date]
 
+        # 換算為張數 (除以 1000)
         f_buy = int(round(chip["foreign_buy"] / 1000.0))
         f_sell = int(round(chip["foreign_sell"] / 1000.0))
         t_buy = int(round(chip["trust_buy"] / 1000.0))
@@ -264,10 +185,11 @@ def fetch_twse_openapi(symbol_code):
 
 
 def fetch_chip_data(raw_symbol):
-    """三大法人籌碼總入口"""
+    """三大法人籌碼總入口 (雙軌備援，適應 Render 雲端環境)"""
     symbol_code = raw_symbol.split(".")[0].strip().upper()
     print(f"📡 [Render Cloud] 正在查詢 [{symbol_code}] 最新三大法人盤後籌碼...")
 
+    # 1. 首選：FinMind API (對 Render 等海外雲端 IP 極度友善)
     res = fetch_finmind_chip(symbol_code)
     if res:
         print(
@@ -275,6 +197,7 @@ def fetch_chip_data(raw_symbol):
         )
         return res
 
+    # 2. 備援：TWSE 官方 OpenData
     res = fetch_twse_openapi(symbol_code)
     if res:
         print(
@@ -410,24 +333,20 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
 
-        # 1. 股價 API (包含中文名稱)
-        if parsed.path in ["/api/yahoo", "/api/stock"]:
+        # 1. 股價 API
+        if parsed.path == "/api/yahoo":
             query = urllib.parse.parse_qs(parsed.query)
             raw_symbol = query.get("symbol", [""])[0]
             market = query.get("market", ["tw"])[0]
-            years = query.get("years", query.get("period", ["3.5"]))[0]
+            years = query.get("years", ["3.5"])[0]
             try:
                 actual_symbol, data = fetch_yahoo_symbol_with_retry(
                     raw_symbol, market, years
                 )
-                # 💡 方案 B 修改點：查詢並帶入中文名稱
-                stock_name = get_stock_name(actual_symbol)
-                
                 self.send_json(
                     200,
                     {
                         "symbol": actual_symbol,
-                        "name": stock_name,  # 👈 新增名稱欄位傳給前端
                         "source": "Yahoo Finance",
                         "rows": data,
                     },
@@ -436,15 +355,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(400, {"error": str(exc)})
             return
 
-        # 2. 單獨查詢股票名稱 API
-        if parsed.path == "/api/stock-name":
-            query = urllib.parse.parse_qs(parsed.query)
-            raw_symbol = query.get("symbol", [""])[0]
-            stock_name = get_stock_name(raw_symbol)
-            self.send_json(200, {"symbol": raw_symbol, "name": stock_name})
-            return
-
-        # 3. 三大法人籌碼 API
+        # 2. 三大法人籌碼 API
         if parsed.path == "/api/chip":
             query = urllib.parse.parse_qs(parsed.query)
             raw_symbol = query.get("symbol", [""])[0]
@@ -457,7 +368,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
             return
 
-        # 4. 靜態檔案處理
+        # 3. 靜態檔案處理
         target = parsed.path.lstrip("/") or "index.html"
         file_path = (ROOT / target).resolve()
         if not str(file_path).startswith(str(ROOT)) or not file_path.is_file():
@@ -479,9 +390,6 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    # 服務啟動時預先加載名稱庫
-    update_stock_names_from_openapi()
-    
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"🚀 Render Cloud Stock Server Started on Port {PORT}")
     try:
