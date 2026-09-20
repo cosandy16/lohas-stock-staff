@@ -1,5 +1,5 @@
 // ==========================================
-// 1. 全域狀態與 DOM 元素 (對齊 index.html)
+// 1. 全域狀態與 DOM 元素 (對齊原版 CSS 與 HTML)
 // ==========================================
 let currentSymbol = "2330.TW";
 
@@ -11,30 +11,30 @@ const periodSelect = document.getElementById("periodYears");
 const modelSelect = document.getElementById("modelMode");
 const chartTitle = document.getElementById("chartTitle");
 
-// 狀態與指標顯示元素
+// 指標與狀態顯示元素
 const closeText = document.getElementById("closeText");
 const zoneText = document.getElementById("zoneText");
 const r2Text = document.getElementById("r2Text");
 const chipText = document.getElementById("chipText");
 const levelsTable = document.getElementById("levelsTable");
 
-// 關注清單 DOM 元素
+// 監控清單控制元素
 const addWatchlistInput = document.getElementById("addWatchlistInput");
 const btnAddWatchlistSingle = document.getElementById("btnAddWatchlistSingle");
 const removeWatchlistSelect = document.getElementById("removeWatchlistSelect");
 const btnRemoveWatchlistSingle = document.getElementById("btnRemoveWatchlistSingle");
 
-// 按鈕與狀態
-const btnWatchlist = document.getElementById("btnWatchlist"); // ⚡ 執行批量掃描更新按鈕
+// 批量更新與狀態元素
+const btnWatchlist = document.getElementById("btnWatchlist"); // ⚡ 執行批量掃描更新
 const watchlistStatus = document.getElementById("watchlistStatus");
 const watchlistResult = document.getElementById("watchlistResult");
 const btnClearWatchlist = document.getElementById("btnClearWatchlist");
 
-// 初始化關注清單 (若 localStorage 無資料，提供預設值)
-let watchlist = JSON.parse(localStorage.getItem("watchlist")) || ["2330.TW", "2454.TW", "0050.TW"];
+// 預設觀察清單
+let watchlist = JSON.parse(localStorage.getItem("watchlist")) || ["2330.TW", "2454.TW", "0050.TW", "2379.TW"];
 
 // ==========================================
-// 2. 工具函式與 API 數據獲取
+// 2. 工具函式
 // ==========================================
 
 function cleanSymbol(symbol) {
@@ -48,9 +48,6 @@ function cleanSymbol(symbol) {
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/**
- * 獲取 K 線歷史數據與股票名稱
- */
 async function fetchStockData(symbol, periodYears) {
   const cleaned = cleanSymbol(symbol);
   if (!cleaned) throw new Error("無效的股票代碼");
@@ -76,9 +73,6 @@ async function fetchStockData(symbol, periodYears) {
   };
 }
 
-/**
- * 向後端獲取三大法人籌碼數據
- */
 async function fetchChipData(symbol) {
   try {
     const cleaned = cleanSymbol(symbol);
@@ -91,9 +85,6 @@ async function fetchChipData(symbol) {
   }
 }
 
-/**
- * 計算樂活五線譜 (線性/對數迴歸 + 標準差)
- */
 function calculateLohasBands(prices, isLogMode = false) {
   const n = prices.length;
   if (n === 0) return null;
@@ -115,7 +106,6 @@ function calculateLohasBands(prices, isLogMode = false) {
   const b = denominator !== 0 ? (n * sumXY - sumX * sumY) / denominator : 0;
   const a = (sumY - b * sumX) / n;
 
-  // 計算判定係數 R²
   const meanY = sumY / n;
   let ssTot = 0, ssRes = 0;
   const trend = [];
@@ -152,7 +142,7 @@ function calculateLohasBands(prices, isLogMode = false) {
 }
 
 // ==========================================
-// 3. 核心繪製與資料渲染
+// 3. 核心繪製邏輯
 // ==========================================
 
 async function renderChart() {
@@ -186,7 +176,6 @@ async function renderChart() {
         const m1 = bands.m1SD[bands.m1SD.length - 1];
         const m2 = bands.m2SD[bands.m2SD.length - 1];
 
-        // 更新位階狀態
         if (zoneText) {
           if (currentPrice >= p2) zoneText.textContent = "極度樂觀";
           else if (currentPrice >= p1) zoneText.textContent = "相對樂觀";
@@ -195,7 +184,6 @@ async function renderChart() {
           else zoneText.textContent = "常態區間";
         }
 
-        // 渲染五線譜參考表
         if (levelsTable) {
           levelsTable.innerHTML = `
             <tr><td>樂觀線 (+2SD)</td><td>$${p2.toFixed(2)}</td><td style="color:var(--red);">過熱區</td></tr>
@@ -208,7 +196,6 @@ async function renderChart() {
       }
     }
 
-    // 載入籌碼數據
     renderChipUI(symbol);
 
   } catch (err) {
@@ -217,9 +204,6 @@ async function renderChart() {
   }
 }
 
-/**
- * 渲染三大法人籌碼狀態
- */
 async function renderChipUI(symbol) {
   if (!chipText) return;
   chipText.innerHTML = '<span style="color:var(--muted);">正在載入盤後籌碼數據...</span>';
@@ -243,7 +227,7 @@ async function renderChipUI(symbol) {
 }
 
 // ==========================================
-// 4. 25 檔巡邏監控與批量更新邏輯
+// 4. 原版 UI 樣式的巡邏卡片渲染
 // ==========================================
 
 async function fetchLevelForWatchlist(symbol) {
@@ -264,19 +248,19 @@ async function fetchLevelForWatchlist(symbol) {
     const m2 = bands.m2SD[bands.m2SD.length - 1];
 
     let levelName = "常態區間";
-    let badgeStyle = "background:#64748b; color:#fff;";
+    let badgeBg = "#64748b";
 
-    if (currentPrice >= p2) { levelName = "極度樂觀"; badgeStyle = "background:#c94b4b; color:#fff;"; }
-    else if (currentPrice >= p1) { levelName = "相對樂觀"; badgeStyle = "background:#d97706; color:#fff;"; }
-    else if (currentPrice <= m2) { levelName = "極度悲觀"; badgeStyle = "background:#1f8a63; color:#fff;"; }
-    else if (currentPrice <= m1) { levelName = "相對悲觀"; badgeStyle = "background:#2c6ebd; color:#fff;"; }
+    if (currentPrice >= p2) { levelName = "極度樂觀"; badgeBg = "#c94b4b"; }
+    else if (currentPrice >= p1) { levelName = "相對樂觀"; badgeBg = "#d97706"; }
+    else if (currentPrice <= m2) { levelName = "極度悲觀"; badgeBg = "#1f8a63"; }
+    else if (currentPrice <= m1) { levelName = "相對悲觀"; badgeBg = "#2c6ebd"; }
 
     return {
       symbol: stockData.symbol,
       name: stockData.name,
       price: currentPrice.toFixed(2),
       levelName: levelName,
-      badgeStyle: badgeStyle
+      badgeBg: badgeBg
     };
   } catch (err) {
     return null;
@@ -284,7 +268,7 @@ async function fetchLevelForWatchlist(symbol) {
 }
 
 /**
- * ⚡ 點擊「執行批量掃描更新」觸發的核心函式
+ * ⚡ 執行批量掃描更新（產生原版精美的 HTML 卡片結構）
  */
 async function runBatchScan() {
   if (!watchlistResult) return;
@@ -311,27 +295,30 @@ async function runBatchScan() {
     
     const item = await fetchLevelForWatchlist(sym);
     if (item) {
+      // 完全還原圖片中原版 UI 的兩欄式卡片結構
       cardsHtml.push(`
         <div class="watchlist-item">
           <div>
-            <a href="#" onclick="switchSymbol('${item.symbol}'); return false;" style="font-weight:bold; text-decoration:none; color:var(--ink);">
+            <div style="font-weight: bold; font-size: 1.05rem; cursor: pointer;" onclick="switchSymbol('${item.symbol}')">
               ${item.symbol} ${item.name}
-            </a>
-            <div style="font-size:0.8rem; color:var(--muted); margin-top:2px;">現價: $${item.price}</div>
+            </div>
+            <div style="color: var(--muted); font-size: 0.85rem; margin-top: 4px;">
+              現價: $${item.price}
+            </div>
           </div>
-          <div style="text-align:right;">
-            <span style="padding:3px 8px; border-radius:4px; font-size:0.75rem; font-weight:bold; ${item.badgeStyle}">
+          <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between;">
+            <span style="background: ${item.badgeBg}; color: #fff; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: bold;">
               ${item.levelName}
             </span>
-            <div style="margin-top:6px;">
-              <button onclick="removeFromWatchlist('${item.symbol}')" style="background:transparent; border:none; color:var(--red); font-size:0.75rem; cursor:pointer; padding:0;">刪除</button>
-            </div>
+            <button onclick="removeFromWatchlist('${item.symbol}')" style="background: none; border: none; color: #c94b4b; cursor: pointer; font-size: 0.82rem; margin-top: 8px; padding: 0;">
+              刪除
+            </button>
           </div>
         </div>
       `);
     }
 
-    await delay(250); // 防撞連線間隔
+    await delay(200);
   }
 
   watchlistResult.innerHTML = cardsHtml.length > 0 
@@ -339,7 +326,7 @@ async function runBatchScan() {
     : '<div style="color:var(--muted); padding:10px;">無法取得監控清單資料</div>';
 
   if (watchlistStatus) {
-    watchlistStatus.textContent = `✅ 掃描完成 (共 ${watchlist.length} 檔)`;
+    watchlistStatus.innerHTML = `✅ 掃描完成 (共 ${watchlist.length} 檔)`;
   }
 
   if (btnWatchlist) {
@@ -371,7 +358,7 @@ window.removeFromWatchlist = function(symbol) {
 };
 
 // ==========================================
-// 5. DOM 事件掛載與初始啟動
+// 5. 事件處理
 // ==========================================
 document.addEventListener("DOMContentLoaded", () => {
   if (fetchBtn) fetchBtn.addEventListener("click", renderChart);
@@ -404,7 +391,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (btnClearWatchlist) {
     btnClearWatchlist.addEventListener("click", () => {
-      if (confirm("確定要清除所有關注清單嗎？")) {
+      if (confirm("確定要清除所有觀察清單嗎？")) {
         watchlist = [];
         localStorage.removeItem("watchlist");
         runBatchScan();
@@ -412,12 +399,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ⚡ 綁定批量掃描按鈕 (#btnWatchlist)
   if (btnWatchlist) {
     btnWatchlist.addEventListener("click", runBatchScan);
   }
 
-  // 頁面初始化
   if (symbolInput) symbolInput.value = currentSymbol;
   renderChart();
   runBatchScan();
