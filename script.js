@@ -1,23 +1,22 @@
 // ==========================================
-// 1. 全域狀態與 DOM 元素 (完全對應 HTML ID)
+// 1. 全域狀態與 DOM 元素 (對齊 index.html)
 // ==========================================
 let currentSymbol = "2330.TW";
-let chartInstance = null;
 
-// DOM 元素引用 (已匹配 index.html)
+// DOM 元素引用
 const marketSelect = document.getElementById("market");
 const symbolInput = document.getElementById("symbolInput");
 const fetchBtn = document.getElementById("fetchSymbolBtn");
 const periodSelect = document.getElementById("periodYears");
 const modelSelect = document.getElementById("modelMode");
 const chartTitle = document.getElementById("chartTitle");
-const chartCanvas = document.getElementById("mainChart"); // 若改用 Canvas 請確認 DOM
 
-// 狀態文字元素
+// 狀態與指標顯示元素
 const closeText = document.getElementById("closeText");
 const zoneText = document.getElementById("zoneText");
 const r2Text = document.getElementById("r2Text");
 const chipText = document.getElementById("chipText");
+const levelsTable = document.getElementById("levelsTable");
 
 // 關注清單 DOM 元素
 const addWatchlistInput = document.getElementById("addWatchlistInput");
@@ -29,20 +28,15 @@ const btnRemoveWatchlistSingle = document.getElementById("btnRemoveWatchlistSing
 const btnWatchlist = document.getElementById("btnWatchlist"); // ⚡ 執行批量掃描更新按鈕
 const watchlistStatus = document.getElementById("watchlistStatus");
 const watchlistResult = document.getElementById("watchlistResult");
-
-// 清除與管理按鈕
 const btnClearWatchlist = document.getElementById("btnClearWatchlist");
 
 // 初始化關注清單 (若 localStorage 無資料，提供預設值)
 let watchlist = JSON.parse(localStorage.getItem("watchlist")) || ["2330.TW", "2454.TW", "0050.TW"];
 
 // ==========================================
-// 2. 工具函式與數據獲取
+// 2. 工具函式與 API 數據獲取
 // ==========================================
 
-/**
- * 格式化股票代碼 (純數字自動補上 .TW)
- */
 function cleanSymbol(symbol) {
   if (!symbol) return "";
   let s = symbol.trim().toUpperCase();
@@ -52,13 +46,10 @@ function cleanSymbol(symbol) {
   return s;
 }
 
-/**
- * 延遲函式 (防撞與 API 限流保護)
- */
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * 向後端 API 獲取數據
+ * 獲取 K 線歷史數據與股票名稱
  */
 async function fetchStockData(symbol, periodYears) {
   const cleaned = cleanSymbol(symbol);
@@ -86,6 +77,21 @@ async function fetchStockData(symbol, periodYears) {
 }
 
 /**
+ * 向後端獲取三大法人籌碼數據
+ */
+async function fetchChipData(symbol) {
+  try {
+    const cleaned = cleanSymbol(symbol);
+    const res = await fetch(`/api/chip?symbol=${encodeURIComponent(cleaned)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.error ? null : data;
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
  * 計算樂活五線譜 (線性/對數迴歸 + 標準差)
  */
 function calculateLohasBands(prices, isLogMode = false) {
@@ -109,15 +115,21 @@ function calculateLohasBands(prices, isLogMode = false) {
   const b = denominator !== 0 ? (n * sumXY - sumX * sumY) / denominator : 0;
   const a = (sumY - b * sumX) / n;
 
-  let sumResidualSq = 0;
+  // 計算判定係數 R²
+  const meanY = sumY / n;
+  let ssTot = 0, ssRes = 0;
   const trend = [];
+
   for (let i = 0; i < n; i++) {
     const fitVal = a + b * i;
     trend.push(fitVal);
     const diff = yValues[i] - fitVal;
-    sumResidualSq += diff * diff;
+    ssRes += diff * diff;
+    ssTot += (yValues[i] - meanY) * (yValues[i] - meanY);
   }
-  const sd = Math.sqrt(sumResidualSq / n);
+
+  const sd = Math.sqrt(ssRes / n);
+  const r2 = ssTot !== 0 ? Math.max(0, 1 - (ssRes / ssTot)) : 0;
 
   const TL = trend;
   const TL_plus_1SD = trend.map(v => v + sd);
@@ -127,6 +139,7 @@ function calculateLohasBands(prices, isLogMode = false) {
 
   if (isLogMode) {
     return {
+      r2: r2,
       TL: TL.map(Math.exp),
       p2SD: TL_plus_2SD.map(Math.exp),
       p1SD: TL_plus_1SD.map(Math.exp),
@@ -135,11 +148,11 @@ function calculateLohasBands(prices, isLogMode = false) {
     };
   }
 
-  return { TL, p2SD: TL_plus_2SD, p1SD: TL_plus_1SD, m1SD: TL_minus_1SD, m2SD: TL_minus_2SD };
+  return { r2, TL, p2SD: TL_plus_2SD, p1SD: TL_plus_1SD, m1SD: TL_minus_1SD, m2SD: TL_minus_2SD };
 }
 
 // ==========================================
-// 3. 核心邏輯：圖表繪製與關注清單
+// 3. 核心繪製與資料渲染
 // ==========================================
 
 async function renderChart() {
@@ -154,29 +167,49 @@ async function renderChart() {
     const stockData = await fetchStockData(symbol, period);
     
     if (chartTitle) {
-      chartTitle.textContent = `${stockData.symbol} ${stockData.name} - 樂活五線譜 (${period}年)`;
+      chartTitle.textContent = `${stockData.symbol} ${stockData.name}`;
     }
 
     const prices = stockData.prices;
     const bands = calculateLohasBands(prices, isLog);
 
-    if (closeText && prices.length > 0) {
-      closeText.textContent = `$${prices[prices.length - 1].toFixed(2)}`;
-    }
-
-    if (bands && zoneText && prices.length > 0) {
+    if (prices.length > 0) {
       const currentPrice = prices[prices.length - 1];
-      const p2 = bands.p2SD[bands.p2SD.length - 1];
-      const p1 = bands.p1SD[bands.p1SD.length - 1];
-      const m1 = bands.m1SD[bands.m1SD.length - 1];
-      const m2 = bands.m2SD[bands.m2SD.length - 1];
+      if (closeText) closeText.textContent = `$${currentPrice.toFixed(2)}`;
 
-      if (currentPrice >= p2) zoneText.textContent = "極度樂觀";
-      else if (currentPrice >= p1) zoneText.textContent = "相對樂觀";
-      else if (currentPrice <= m2) zoneText.textContent = "極度悲觀";
-      else if (currentPrice <= m1) zoneText.textContent = "相對悲觀";
-      else zoneText.textContent = "常態區間";
+      if (bands) {
+        if (r2Text) r2Text.textContent = bands.r2.toFixed(3);
+
+        const p2 = bands.p2SD[bands.p2SD.length - 1];
+        const p1 = bands.p1SD[bands.p1SD.length - 1];
+        const tl = bands.TL[bands.TL.length - 1];
+        const m1 = bands.m1SD[bands.m1SD.length - 1];
+        const m2 = bands.m2SD[bands.m2SD.length - 1];
+
+        // 更新位階狀態
+        if (zoneText) {
+          if (currentPrice >= p2) zoneText.textContent = "極度樂觀";
+          else if (currentPrice >= p1) zoneText.textContent = "相對樂觀";
+          else if (currentPrice <= m2) zoneText.textContent = "極度悲觀";
+          else if (currentPrice <= m1) zoneText.textContent = "相對悲觀";
+          else zoneText.textContent = "常態區間";
+        }
+
+        // 渲染五線譜參考表
+        if (levelsTable) {
+          levelsTable.innerHTML = `
+            <tr><td>樂觀線 (+2SD)</td><td>$${p2.toFixed(2)}</td><td style="color:var(--red);">過熱區</td></tr>
+            <tr><td>相對樂觀 (+1SD)</td><td>$${p1.toFixed(2)}</td><td style="color:#d97706;">偏高區</td></tr>
+            <tr><td>均值線 (TL)</td><td>$${tl.toFixed(2)}</td><td style="color:var(--blue);">合理價</td></tr>
+            <tr><td>相對悲觀 (-1SD)</td><td>$${m1.toFixed(2)}</td><td style="color:#2c6ebd;">偏低區</td></tr>
+            <tr><td>悲觀線 (-2SD)</td><td>$${m2.toFixed(2)}</td><td style="color:var(--green);">超跌區</td></tr>
+          `;
+        }
+      }
     }
+
+    // 載入籌碼數據
+    renderChipUI(symbol);
 
   } catch (err) {
     console.error("renderChart 錯誤:", err);
@@ -185,8 +218,34 @@ async function renderChart() {
 }
 
 /**
- * 單檔位階獲取
+ * 渲染三大法人籌碼狀態
  */
+async function renderChipUI(symbol) {
+  if (!chipText) return;
+  chipText.innerHTML = '<span style="color:var(--muted);">正在載入盤後籌碼數據...</span>';
+
+  const chip = await fetchChipData(symbol);
+  if (!chip) {
+    chipText.innerHTML = '<span style="color:var(--muted);">尚無今日盤後籌碼或非台股標的</span>';
+    return;
+  }
+
+  const fStr = chip.foreign >= 0 ? `+${chip.foreign}` : `${chip.foreign}`;
+  const tStr = chip.trust >= 0 ? `+${chip.trust}` : `${chip.trust}`;
+  const totStr = chip.total >= 0 ? `+${chip.total}` : `${chip.total}`;
+
+  chipText.innerHTML = `
+    📊 <strong>${chip.date} 三大法人籌碼：</strong>
+    外資 <span style="color:${chip.foreign >= 0 ? 'var(--red)' : 'var(--green)'}">${fStr}</span> 張 | 
+    投信 <span style="color:${chip.trust >= 0 ? 'var(--red)' : 'var(--green)'}">${tStr}</span> 張 | 
+    合計 <span style="color:${chip.total >= 0 ? 'var(--red)' : 'var(--green)'}">${totStr}</span> 張
+  `;
+}
+
+// ==========================================
+// 4. 25 檔巡邏監控與批量更新邏輯
+// ==========================================
+
 async function fetchLevelForWatchlist(symbol) {
   try {
     const period = periodSelect ? periodSelect.value : "3.5";
@@ -225,18 +284,17 @@ async function fetchLevelForWatchlist(symbol) {
 }
 
 /**
- * ⚡ 執行批量掃描更新 (綁定至 #btnWatchlist)
+ * ⚡ 點擊「執行批量掃描更新」觸發的核心函式
  */
 async function runBatchScan() {
   if (!watchlistResult) return;
 
   if (watchlist.length === 0) {
-    watchlistResult.innerHTML = '<div style="color:var(--muted); padding:10px;">目前清單為空</div>';
+    watchlistResult.innerHTML = '<div style="color:var(--muted); padding:10px;">目前監控清單為空</div>';
     updateRemoveSelect();
     return;
   }
 
-  // 禁用按鈕防重複點擊
   if (btnWatchlist) {
     btnWatchlist.disabled = true;
     btnWatchlist.textContent = "⏳ 正在批量掃描中...";
@@ -273,7 +331,7 @@ async function runBatchScan() {
       `);
     }
 
-    await delay(250); // 防撞間隔
+    await delay(250); // 防撞連線間隔
   }
 
   watchlistResult.innerHTML = cardsHtml.length > 0 
@@ -284,7 +342,6 @@ async function runBatchScan() {
     watchlistStatus.textContent = `✅ 掃描完成 (共 ${watchlist.length} 檔)`;
   }
 
-  // 恢復按鈕狀態
   if (btnWatchlist) {
     btnWatchlist.disabled = false;
     btnWatchlist.textContent = "⚡ 執行批量掃描更新";
@@ -293,21 +350,15 @@ async function runBatchScan() {
   updateRemoveSelect();
 }
 
-/**
- * 更新下拉刪除選單內容
- */
 function updateRemoveSelect() {
   if (!removeWatchlistSelect) return;
-  
   if (watchlist.length === 0) {
     removeWatchlistSelect.innerHTML = '<option value="">📭 清單為空</option>';
     return;
   }
-
   removeWatchlistSelect.innerHTML = watchlist.map(s => `<option value="${s}">${s}</option>`).join('');
 }
 
-// 全域切換與移除方法
 window.switchSymbol = function(symbol) {
   if (symbolInput) symbolInput.value = symbol;
   renderChart();
@@ -320,19 +371,13 @@ window.removeFromWatchlist = function(symbol) {
 };
 
 // ==========================================
-// 4. 事件監聽器綁定
+// 5. DOM 事件掛載與初始啟動
 // ==========================================
 document.addEventListener("DOMContentLoaded", () => {
-  // 載入個股數據按鈕 (#fetchSymbolBtn)
-  if (fetchBtn) {
-    fetchBtn.addEventListener("click", renderChart);
-  }
-
-  // 下拉選單變更
+  if (fetchBtn) fetchBtn.addEventListener("click", renderChart);
   if (periodSelect) periodSelect.addEventListener("change", renderChart);
   if (modelSelect) modelSelect.addEventListener("change", renderChart);
 
-  // 單檔新增按鈕 (#btnAddWatchlistSingle)
   if (btnAddWatchlistSingle && addWatchlistInput) {
     btnAddWatchlistSingle.addEventListener("click", () => {
       const val = addWatchlistInput.value.trim();
@@ -348,7 +393,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // 單檔刪除按鈕 (#btnRemoveWatchlistSingle)
   if (btnRemoveWatchlistSingle && removeWatchlistSelect) {
     btnRemoveWatchlistSingle.addEventListener("click", () => {
       const selected = removeWatchlistSelect.value;
@@ -358,7 +402,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // 清除全部按鈕 (#btnClearWatchlist)
   if (btnClearWatchlist) {
     btnClearWatchlist.addEventListener("click", () => {
       if (confirm("確定要清除所有關注清單嗎？")) {
@@ -369,12 +412,12 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ⚡ 正確綁定「執行批量掃描更新」按鈕 (#btnWatchlist)
+  // ⚡ 綁定批量掃描按鈕 (#btnWatchlist)
   if (btnWatchlist) {
     btnWatchlist.addEventListener("click", runBatchScan);
   }
 
-  // 初始載入與執行
+  // 頁面初始化
   if (symbolInput) symbolInput.value = currentSymbol;
   renderChart();
   runBatchScan();
