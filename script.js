@@ -6,6 +6,14 @@
 // 1. 靜態資料字典與基本面資料
 // ------------------------------------------
 const TW_STOCK_NAMES = {
+  // --- 圖片中缺少的個股與 ETF 補全 ---
+  "1477":"聚陽", "1795":"美時", "2480":"敦陽科", "3023":"信邦", 
+  "3147":"大綜", "3551":"世禾", "5340":"建榮", "5439":"高技", "9911":"櫻花",
+  "0050":"元大台灣50", "0056":"元大高股息", "00878":"國泰永續高股息", 
+  "00919":"群益台灣精選高息", "00929":"復華台灣科技優息", "00940":"元大台灣價值高息",
+  "00881":"國泰台灣5G+", "00646":"元大S&P500", "009816":"中信日本半導體",
+
+  // --- 既有常見台股字典 ---
   "1101":"台泥","1102":"亞泥","1216":"統一","1301":"台塑","1303":"南亞","1326":"台化",
   "1402":"遠東新","1476":"儒鴻","1504":"東元","1590":"亞德客","1605":"華新",
   "2002":"中鋼","2006":"東和鋼鐵","2015":"豐興","2049":"上銀","2059":"川湖",
@@ -708,7 +716,14 @@ function updateWatchlistDisplay() {
   const sortMode = watchlistSort ? watchlistSort.value : "code";
 
   let resultList = scannedWatchlistCache.filter(item => {
-    const matchSearch = item.sym.toLowerCase().includes(searchQuery) || (item.name && item.name.toLowerCase().includes(searchQuery));
+    // 取得靜態字典與動態名稱
+    const dictName = getStockName(item.sym);
+    const apiName = item.name || "";
+    
+    // 同時搜尋：代號、字典名稱、API名稱
+    const matchSearch = item.sym.toLowerCase().includes(searchQuery) || 
+                        dictName.toLowerCase().includes(searchQuery) ||
+                        apiName.toLowerCase().includes(searchQuery);
     
     const zone = priceZone(item.last);
     let matchZone = true;
@@ -720,7 +735,6 @@ function updateWatchlistDisplay() {
 
     return matchSearch && matchZone;
   });
-
   resultList.sort((a, b) => {
     if (sortMode === "code") {
       return a.sym.localeCompare(b.sym);
