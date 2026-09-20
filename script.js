@@ -1,82 +1,5 @@
 // ==========================================
-// 1. 靜態熱門股清單與動態快取
-// ==========================================
-const TW_STOCK_NAMES = {
-  "2330": "台積電",
-  "2317": "鴻海",
-  "2454": "聯發科",
-  "2308": "台達電",
-  "2382": "廣達",
-  "2881": "富邦金",
-  "2882": "國泰金",
-  "2891": "中信金",
-  "0050": "元大台灣50",
-  "0056": "元大高股息",
-  "00878": "國泰永續高股息",
-  "00919": "群益台灣精選高息",
-  "00929": "復華台灣科技優息",
-  "00940": "元大台灣價值高息"
-};
-
-// 使用展開運算子將熱門股載入快取，做為查詢第一線
-const stockNameCache = { ...TW_STOCK_NAMES };
-
-/**
- * 非同步取得股票中文名稱
- * 順序：1. 快取/熱門清單 -> 2. 證交所 (上市) API -> 3. 櫃買中心 (上櫃) API -> 4. 傳回原代碼
- * @param {string} symbol - 股票代碼 (例: "2330", "2330.TW", "00878.TWO")
- * @returns {Promise<string>} 中文名稱或原代碼
- */
-async function getStockNameAsync(symbol) {
-  if (!symbol) return "";
-
-  // 整理代碼，格式化為純數字 (例如 "2330.TW" -> "2330")
-  const cleanCode = symbol.split('.')[0].trim().toUpperCase();
-
-  // 1. 優先查詢快取（包含寫死的熱門股與先前已查到的股票）
-  if (stockNameCache[cleanCode]) {
-    return stockNameCache[cleanCode];
-  }
-
-  // 若不是數字開頭的股票代碼（如美股 AAPL, TSLA），直接寫入快取並回傳
-  if (!/^\d+$/.test(cleanCode)) {
-    stockNameCache[cleanCode] = cleanCode;
-    return cleanCode;
-  }
-
-  try {
-    // 2. 向證交所 OpenAPI (上市股票/ETF) 查詢
-    const twseRes = await fetch('https://openapi.twse.com.tw/v1/opendata/t187ap03_L');
-    if (twseRes.ok) {
-      const twseData = await twseRes.json();
-      const match = twseData.find(item => item.公司代號 === cleanCode);
-      if (match && match.公司簡稱) {
-        stockNameCache[cleanCode] = match.公司簡稱; // 寫入快取
-        return match.公司簡稱;
-      }
-    }
-
-    // 3. 若上市查無結果，向櫃買中心 OpenAPI (上櫃股票/ETF) 查詢
-    const tpexRes = await fetch('https://openapi.twse.com.tw/v1/opendata/t187ap03_O');
-    if (tpexRes.ok) {
-      const tpexData = await tpexRes.json();
-      const match = tpexData.find(item => item.公司代號 === cleanCode);
-      if (match && match.公司簡稱) {
-        stockNameCache[cleanCode] = match.公司簡稱; // 寫入快取
-        return match.公司簡稱;
-      }
-    }
-  } catch (err) {
-    console.warn(`[StockName] 動態查詢中文名稱失敗 (${cleanCode}):`, err);
-  }
-
-  // 4. 若公開 API 皆查無資料，將代碼寫入快取避免重複查詢，並直接回傳代碼
-  stockNameCache[cleanCode] = cleanCode;
-  return cleanCode;
-}
-
-// ==========================================
-// 2. 全域狀態與 DOM 元素
+// 1. 全域狀態與 DOM 元素
 // ==========================================
 let currentSymbol = "2330.TW";
 let chartInstance = null;
@@ -98,29 +21,44 @@ const watchlistContainer = document.getElementById("watchlistContainer");
 let watchlist = JSON.parse(localStorage.getItem("watchlist")) || ["2330.TW", "2454.TW", "0050.TW"];
 
 // ==========================================
-// 3. 核心邏輯：五線譜計算與圖表繪製
+// 2. 工具函式與數據獲取
 // ==========================================
 
 /**
- * 格式化股票代碼以符合 Yahoo Finance API 格式
+ * 格式化股票代碼 (純數字自動補上 .TW)
  */
 function cleanSymbol(symbol) {
   let s = symbol.trim().toUpperCase();
   if (/^\d+$/.test(s)) {
-    return `${s}.TW`; // 純數字預設補上 .TW
+    return `${s}.TW`;
   }
   return s;
 }
 
 /**
- * 向後端 API 獲取 K 線歷史數據
+ * 向方案 B 後端 API 獲取 K 線歷史數據與股票名稱
  */
 async function fetchStockData(symbol, periodYears) {
-  const response = await fetch(`/api/stock?symbol=${encodeURIComponent(symbol)}&period=${periodYears}`);
+  const cleaned = cleanSymbol(symbol);
+  // 對接方案 B 後端 /api/yahoo API
+  const response = await fetch(`/api/yahoo?symbol=${encodeURIComponent(cleaned)}&years=${periodYears}`);
   if (!response.ok) {
     throw new Error("無法取得股票歷史資料");
   }
-  return await response.json();
+  const data = await response.json();
+  
+  if (data.error) {
+    throw new Error(data.error);
+  }
+
+  // 將後端回傳的 rows [{date, close, raw_close}] 轉為圖表需要的陣列格式
+  const rows = data.rows || [];
+  return {
+    symbol: data.symbol,
+    name: data.name || data.symbol, // 後端方案 B 直接提供的中文名稱
+    dates: rows.map(r => r.date),
+    prices: rows.map(r => r.close)
+  };
 }
 
 /**
@@ -185,23 +123,27 @@ function calculateLohasBands(prices, isLogMode = false) {
   };
 }
 
+// ==========================================
+// 3. 核心邏輯：圖表繪製
+// ==========================================
+
 /**
  * 繪製或更新 Chart.js 圖表
  */
 async function renderChart() {
   const symbol = cleanSymbol(symbolInput.value || currentSymbol);
   currentSymbol = symbol;
-  const period = periodSelect.value || "3";
+  const period = periodSelect.value || "3.5";
   const isLog = modelSelect.value === "log";
 
-  // 動態非同步獲取中文名稱
-  const chineseName = await getStockNameAsync(symbol);
-  chartTitle.textContent = `${symbol} ${chineseName} - 樂活五線譜 (${period}年)`;
-
   try {
-    const data = await fetchStockData(symbol, period);
-    const dates = data.dates;
-    const prices = data.prices;
+    const stockData = await fetchStockData(symbol, period);
+    
+    // 更新圖表標題（顯示後端傳回的中文名稱）
+    chartTitle.textContent = `${stockData.symbol} ${stockData.name} - 樂活五線譜 (${period}年)`;
+
+    const dates = stockData.dates;
+    const prices = stockData.prices;
     const bands = calculateLohasBands(prices, isLog);
 
     if (chartInstance) {
@@ -241,12 +183,12 @@ async function renderChart() {
 // ==========================================
 
 /**
- * 計算關注股票的當前位階
+ * 計算關注股票的當前位階與獲取名稱
  */
 async function fetchLevelForWatchlist(symbol) {
   try {
-    const data = await fetchStockData(symbol, periodSelect.value || "3");
-    const prices = data.prices;
+    const stockData = await fetchStockData(symbol, periodSelect.value || "3.5");
+    const prices = stockData.prices;
     if (!prices || prices.length === 0) return null;
 
     const currentPrice = prices[prices.length - 1];
@@ -270,12 +212,9 @@ async function fetchLevelForWatchlist(symbol) {
       levelName = "相對悲觀"; badgeClass = "bg-info text-dark";
     }
 
-    // 💡 非同步動態獲取名稱 (關鍵修改點)
-    const name = await getStockNameAsync(symbol);
-
     return {
-      symbol: cleanSymbol(symbol),
-      name: name,
+      symbol: stockData.symbol,
+      name: stockData.name,
       price: currentPrice.toFixed(2),
       levelName: levelName,
       badgeClass: badgeClass
