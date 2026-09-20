@@ -794,9 +794,12 @@ function updateWatchlistDisplay() {
     const nearest = getNearestLevel(item.last);
     const nearestHint = formatNearestText(nearest);
 
+    // 強制優先取用本地字典名稱，確保畫面一定會顯示中文名稱
+    const displayName = getStockName(item.sym) || item.name || "";
+
     card.innerHTML = `
       <div>
-        <strong>${item.sym}</strong>${item.name ? `<span style="color:#555; font-size:0.85em; margin-left:6px;">${item.name}</span>` : ""}<br>
+        <strong>${item.sym}</strong>${displayName ? `<span style="color:#555; font-size:0.85em; margin-left:6px; font-weight:600;">${displayName}</span>` : ""}<br>
         <small style="color:${smallTextColor}; display: block; margin-top: 4px; line-height: 1.5;">
           <span style="white-space: nowrap;">現價: ${formatPrice(item.last.raw_close || item.last.close)}</span> 
           <span style="white-space: nowrap;">(還原: ${formatPrice(item.last.close)})</span>
