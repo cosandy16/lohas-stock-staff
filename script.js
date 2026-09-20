@@ -624,10 +624,13 @@ async function fetchLevelForWatchlist(symbol) {
   const chipData = chipRes.status === "fulfilled" ? chipRes.value : null;
   const analysis = buildAnalysis(json.rows, "linear", "3.5");
 
+  // 先查本地字典，無資料則帶入 API 返回名稱
+  const displayName = getStockName(json.symbol) || json.shortName || json.longName || json.name || "";
+
   return { 
     sym: json.symbol, 
     last: analysis[analysis.length - 1], 
-    name: getStockName(json.symbol),
+    name: displayName,
     chip: chipData
   };
 }
@@ -845,7 +848,6 @@ if (fetchSymbolBtn) {
         chartTitle.textContent = formatSymbolDisplay(json.symbol);
       }
       
-      // 成功載入股票後，顯示「加入觀察清單」按鈕
       if (btnAddToWatchlist) {
         btnAddToWatchlist.style.display = "inline-block";
       }
@@ -887,14 +889,12 @@ if (btnAddToWatchlist) {
       return;
     }
 
-    // 加入清單並更新 UI 與 LocalStorage
     syms.push(rawSym);
     watchlistInput.value = syms.join(", ");
     localStorage.setItem("lohas_watchlist", watchlistInput.value);
 
     updateRemoveSelect();
     
-    // 即時計算並加入快取
     try {
       const data = await fetchLevelForWatchlist(rawSym);
       scannedWatchlistCache = scannedWatchlistCache.filter(item => {
@@ -1014,7 +1014,7 @@ if (btnClearWatchlist) {
 }
 
 // ------------------------------------------
-// 12.【功能二 (方案二)】：複製與智慧併集合併匯入
+// 12. 複製與智慧併集合併匯入
 // ------------------------------------------
 if (btnExportWatchlist) {
   btnExportWatchlist.addEventListener("click", (e) => {
@@ -1047,13 +1047,11 @@ if (btnImportWatchlist) {
     const userInput = prompt("請貼上您要匯入的股票代號（例如: 2330, 2317, 2454）：");
     if (userInput === null) return;
     
-    // 1. 取得現有清單
     const existingSyms = (watchlistInput.value || "")
       .split(",")
       .map(s => s.trim().toUpperCase())
       .filter(s => s);
 
-    // 2. 取得新輸入清單
     const importedSyms = userInput
       .split(",")
       .map(s => s.trim().toUpperCase())
@@ -1064,7 +1062,6 @@ if (btnImportWatchlist) {
       return;
     }
 
-    // 3. 智慧併集合併 (自動去重，保留舊的，加上新的)
     const mergedSet = new Set([...existingSyms, ...importedSyms]);
     const mergedList = Array.from(mergedSet);
 
@@ -1073,7 +1070,6 @@ if (btnImportWatchlist) {
       mergedList.length = 25;
     }
 
-    // 4. 寫回 UI 與 LocalStorage
     watchlistInput.value = mergedList.join(", ");
     localStorage.setItem("lohas_watchlist", watchlistInput.value);
 
