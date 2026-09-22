@@ -2,6 +2,16 @@
 // 樂活通道 / 股票觀察清單 腳本 (script.js)
 // ==========================================
 
+const MAX_WATCHLIST_LIMIT = 40;
+
+// 2. 頁面載入時動態更新 HTML 標題
+document.addEventListener("DOMContentLoaded", () => {
+  const watchlistTitle = document.getElementById("watchlistTitle");
+  if (watchlistTitle) {
+    watchlistTitle.textContent = `📋 ${MAX_WATCHLIST_LIMIT} 檔個股巡邏監控`;
+  }
+});
+
 // ------------------------------------------
 // 1. 靜態資料字典與基本面資料
 // ------------------------------------------
@@ -655,7 +665,7 @@ if (btnWatchlist) {
       .split(",")
       .map(s => s.trim().toUpperCase())
       .filter(s => s.length > 0)
-      .slice(0, 25);
+      .slice(0, MAX_WATCHLIST_LIMIT);
 
     if (syms.length === 0) {
       watchlistStatus.textContent = "⚠️ 請輸入有效的股票代碼！";
@@ -901,10 +911,10 @@ if (btnAddToWatchlist) {
       return;
     }
 
-    if (syms.length >= 25) {
-      alert("⚠️ 觀察清單最多只能 25 支股票！");
-      return;
-    }
+	if (syms.length >= MAX_WATCHLIST_LIMIT) {
+	  alert(`⚠️ 觀察清單最多只能 ${MAX_WATCHLIST_LIMIT} 支股票！`);
+	  return;
+	}
 
     syms.push(rawSym);
     watchlistInput.value = syms.join(", ");
@@ -944,10 +954,10 @@ if (btnAddWatchlistSingle) {
       return;
     }
     
-    if (syms.length >= 25) {
-      watchlistStatus.textContent = "⚠️ 監控清單最多只能 25 支股票喔！";
-      return;
-    }
+	if (syms.length >= MAX_WATCHLIST_LIMIT) {
+	  watchlistStatus.textContent = `⚠️ 監控清單最多只能 ${MAX_WATCHLIST_LIMIT} 支股票喔！`;
+	  return;
+	}
     
     syms.push(newSym);
     watchlistInput.value = syms.join(", ");
@@ -1082,10 +1092,10 @@ if (btnImportWatchlist) {
     const mergedSet = new Set([...existingSyms, ...importedSyms]);
     const mergedList = Array.from(mergedSet);
 
-    if (mergedList.length > 25) {
-      alert("⚠️ 合併後數量超過 25 支上限，將自動截取保留前 25 支股票。");
-      mergedList.length = 25;
-    }
+	if (mergedList.length > MAX_WATCHLIST_LIMIT) {
+	  alert(`⚠️ 合併後數量超過 ${MAX_WATCHLIST_LIMIT} 支上限，將自動截取保留前 ${MAX_WATCHLIST_LIMIT} 支股票。`);
+	  mergedList.length = MAX_WATCHLIST_LIMIT;
+	}
 
     watchlistInput.value = mergedList.join(", ");
     localStorage.setItem("lohas_watchlist", watchlistInput.value);
