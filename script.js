@@ -19,17 +19,6 @@ async function fetchStockNames() {
   }
 }
 
-// 頁面載入時初始化
-document.addEventListener("DOMContentLoaded", async () => {
-  const watchlistTitle = document.getElementById("watchlistTitle");
-  if (watchlistTitle) {
-    watchlistTitle.textContent = `📋 ${MAX_WATCHLIST_LIMIT} 檔個股巡邏監控`;
-  }
-  
-  // 啟動時向後端取得最新的名稱對照表
-  await fetchStockNames();
-});
-
 // 基本面資料字典
 const STOCK_FUNDAMENTALS = {
   "1101": { eps: 2.2, dividend: 1.5 },
@@ -58,43 +47,12 @@ const STOCK_FUNDAMENTALS = {
 // ------------------------------------------
 // 2. DOM 元素選取與全域變數
 // ------------------------------------------
-const csvInput = document.querySelector("#csvInput");
-const market = document.querySelector("#market");
-const symbolInput = document.querySelector("#symbolInput");
-const fetchSymbolBtn = document.querySelector("#fetchSymbolBtn");
-const fetchStatus = document.querySelector("#fetchStatus");
-const periodYears = document.querySelector("#periodYears");
-const modelMode = document.querySelector("#modelMode");
-const chart = document.querySelector("#chart");
-const chartTitle = document.querySelector("#chartTitle");
-const btnAddToWatchlist = document.querySelector("#btnAddToWatchlist");
-
-const rangeText = document.querySelector("#rangeText");
-const zoneText = document.querySelector("#zoneText");
-const closeText = document.querySelector("#closeText");
-const r2Text = document.querySelector("#r2Text");
-const levelsTable = document.querySelector("#levelsTable");
-
-const peText = document.querySelector("#peText");
-const yieldText = document.querySelector("#yieldText");
-
-const watchlistInput = document.querySelector("#watchlistInput");
-const btnWatchlist = document.querySelector("#btnWatchlist");
-const btnClearWatchlist = document.querySelector("#btnClearWatchlist");
-const watchlistResult = document.querySelector("#watchlistResult");
-const watchlistStatus = document.querySelector("#watchlistStatus");
-
-const addWatchlistInput = document.querySelector("#addWatchlistInput");
-const btnAddWatchlistSingle = document.querySelector("#btnAddWatchlistSingle");
-const removeWatchlistSelect = document.querySelector("#removeWatchlistSelect");
-const btnRemoveWatchlistSingle = document.querySelector("#btnRemoveWatchlistSingle");
-
-const btnExportWatchlist = document.querySelector("#btnExportWatchlist");
-const btnImportWatchlist = document.querySelector("#btnImportWatchlist");
-
-const watchlistSearch = document.querySelector("#watchlistSearch");
-const watchlistFilterZone = document.querySelector("#watchlistFilterZone");
-const watchlistSort = document.querySelector("#watchlistSort");
+let csvInput, market, symbolInput, fetchSymbolBtn, fetchStatus, periodYears, modelMode;
+let chart, chartTitle, btnAddToWatchlist, rangeText, zoneText, closeText, r2Text, levelsTable;
+let peText, yieldText, watchlistInput, btnWatchlist, btnClearWatchlist, watchlistResult;
+let watchlistStatus, addWatchlistInput, btnAddWatchlistSingle, removeWatchlistSelect;
+let btnRemoveWatchlistSingle, btnExportWatchlist, btnImportWatchlist, watchlistSearch;
+let watchlistFilterZone, watchlistSort;
 
 let deletedWatchlistBackup = "";
 let scannedWatchlistCache = [];
@@ -107,6 +65,46 @@ const levelDefs = [
   { key: "minus2", label: "-2SD 悲觀線", color: "#12614a" },
 ];
 
+function initDOMElements() {
+  csvInput = document.querySelector("#csvInput");
+  market = document.querySelector("#market");
+  symbolInput = document.querySelector("#symbolInput");
+  fetchSymbolBtn = document.querySelector("#fetchSymbolBtn");
+  fetchStatus = document.querySelector("#fetchStatus");
+  periodYears = document.querySelector("#periodYears");
+  modelMode = document.querySelector("#modelMode");
+  chart = document.querySelector("#chart");
+  chartTitle = document.querySelector("#chartTitle");
+  btnAddToWatchlist = document.querySelector("#btnAddToWatchlist");
+
+  rangeText = document.querySelector("#rangeText");
+  zoneText = document.querySelector("#zoneText");
+  closeText = document.querySelector("#closeText");
+  r2Text = document.querySelector("#r2Text");
+  levelsTable = document.querySelector("#levelsTable");
+
+  peText = document.querySelector("#peText");
+  yieldText = document.querySelector("#yieldText");
+
+  watchlistInput = document.querySelector("#watchlistInput");
+  btnWatchlist = document.querySelector("#btnWatchlist");
+  btnClearWatchlist = document.querySelector("#btnClearWatchlist");
+  watchlistResult = document.querySelector("#watchlistResult");
+  watchlistStatus = document.querySelector("#watchlistStatus");
+
+  addWatchlistInput = document.querySelector("#addWatchlistInput");
+  btnAddWatchlistSingle = document.querySelector("#btnAddWatchlistSingle");
+  removeWatchlistSelect = document.querySelector("#removeWatchlistSelect");
+  btnRemoveWatchlistSingle = document.querySelector("#btnRemoveWatchlistSingle");
+
+  btnExportWatchlist = document.querySelector("#btnExportWatchlist");
+  btnImportWatchlist = document.querySelector("#btnImportWatchlist");
+
+  watchlistSearch = document.querySelector("#watchlistSearch");
+  watchlistFilterZone = document.querySelector("#watchlistFilterZone");
+  watchlistSort = document.querySelector("#watchlistSort");
+}
+
 // ------------------------------------------
 // 3. 通用工具與計算函式
 // ------------------------------------------
@@ -116,8 +114,9 @@ function getFundamentals(symbol, currentPrice) {
   if (STOCK_FUNDAMENTALS[code]) {
     return STOCK_FUNDAMENTALS[code];
   }
-  const estimatedEps = +(currentPrice / 16).toFixed(2);
-  const estimatedDiv = +(currentPrice * 0.04).toFixed(2);
+  const safePrice = currentPrice || 100;
+  const estimatedEps = +(safePrice / 16).toFixed(2);
+  const estimatedDiv = +(safePrice * 0.04).toFixed(2);
   return { eps: estimatedEps, dividend: estimatedDiv };
 }
 
@@ -215,7 +214,16 @@ function formatPrice(v) {
 // ------------------------------------------
 // 4. 初始化與快取管理
 // ------------------------------------------
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  initDOMElements();
+
+  const watchlistTitle = document.getElementById("watchlistTitle");
+  if (watchlistTitle) {
+    watchlistTitle.textContent = `📋 ${MAX_WATCHLIST_LIMIT} 檔個股巡邏監控`;
+  }
+
+  await fetchStockNames();
+
   const savedWatchlist = localStorage.getItem("lohas_watchlist");
   if (savedWatchlist && watchlistInput) {
     watchlistInput.value = savedWatchlist;
@@ -233,6 +241,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (watchlistSort) watchlistSort.addEventListener("change", updateWatchlistDisplay);
 
   loadWatchlistFromCache();
+  bindEvents();
 });
 
 function loadWatchlistFromCache() {
@@ -263,7 +272,7 @@ function saveWatchlistCache() {
 }
 
 function updateRemoveSelect() {
-  if (!removeWatchlistSelect) return;
+  if (!removeWatchlistSelect || !watchlistInput) return;
   const currentText = watchlistInput.value || "";
   const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
   
@@ -446,7 +455,7 @@ function renderChart(analysis) {
           chartTooltip.style.left = `${tooltipLeft * scaleX}px`;
           chartTooltip.style.top = `${15 * scaleY}px`;
 
-          const symbolCode = symbolInput.value.trim().toUpperCase();
+          const symbolCode = symbolInput ? symbolInput.value.trim().toUpperCase() : "";
           const pFun = getFundamentals(symbolCode, point.close);
           const histPe = pFun.eps > 0 ? `${(point.close / pFun.eps).toFixed(1)}x` : "N/A (ETF)";
           const histYield = `${((pFun.dividend / point.close) * 100).toFixed(2)}%`;
@@ -483,6 +492,7 @@ function renderChart(analysis) {
 
 function render() {
   try {
+    if (!csvInput || !csvInput.value) return;
     const data = JSON.parse(csvInput.value);
     const analysis = buildAnalysis(data);
     const last = analysis[analysis.length - 1];
@@ -503,7 +513,7 @@ function render() {
     if (r2Text) r2Text.textContent = last.r2.toFixed(3);
     if (rangeText) rangeText.textContent = getPriceRangeDesc(last);
     
-    const symbolCode = symbolInput.value.trim().toUpperCase();
+    const symbolCode = symbolInput ? symbolInput.value.trim().toUpperCase() : "";
     const fun = getFundamentals(symbolCode, last.close);
     if (peText) {
       peText.textContent = fun.eps > 0 ? `${(last.close / fun.eps).toFixed(1)} 倍` : "N/A (ETF)";
@@ -589,7 +599,6 @@ async function fetchLevelForWatchlist(symbol) {
   const chipData = chipRes.status === "fulfilled" ? chipRes.value : null;
   const analysis = buildAnalysis(json.rows, "linear", "3.5");
 
-  // 優先使用 OpenData/後端發送回來的中文名稱
   const displayName = json.name || getStockName(json.symbol) || "";
 
   return { 
@@ -603,70 +612,23 @@ async function fetchLevelForWatchlist(symbol) {
 // ------------------------------------------
 // 8. 觀察清單邏輯
 // ------------------------------------------
-if (btnWatchlist) {
-  btnWatchlist.addEventListener("click", async () => {
-    const rawInput = watchlistInput.value;
-    localStorage.setItem("lohas_watchlist", rawInput);
-
-    const syms = rawInput
-      .split(",")
-      .map(s => s.trim().toUpperCase())
-      .filter(s => s.length > 0)
-      .slice(0, MAX_WATCHLIST_LIMIT);
-
-    if (syms.length === 0) {
-      watchlistStatus.textContent = "⚠️ 請輸入有效的股票代碼！";
-      watchlistStatus.style.color = "var(--red, #c94b4b)";
-      return;
-    }
-
-    watchlistResult.innerHTML = "";
-    scannedWatchlistCache = [];
-    btnWatchlist.disabled = true;
-
-    watchlistStatus.textContent = `🔄 正在批量更新 ${syms.length} 支股票（含籌碼）...`;
-    watchlistStatus.style.color = "var(--blue)";
-
-    try {
-      const fetchPromises = syms.map(symbol => fetchLevelForWatchlist(symbol));
-      const results = await Promise.allSettled(fetchPromises);
-
-      let successCount = 0;
-      let failCount = 0;
-
-      results.forEach((result, index) => {
-        if (result.status === "fulfilled") {
-          scannedWatchlistCache.push(result.value);
-          successCount++;
-        } else {
-          failCount++;
-          console.error(`❌ 股票 ${syms[index]} 抓取失敗:`, result.reason);
-        }
-      });
-
-      updateWatchlistDisplay();
-      saveWatchlistCache();
-
-      if (failCount === 0) {
-        watchlistStatus.textContent = `✅ 更新完成 (共 ${successCount} 檔)`;
-        watchlistStatus.style.color = "var(--blue)";
-      } else {
-        watchlistStatus.textContent = `⚠️ 更新完成：成功 ${successCount} 檔，失敗 ${failCount} 檔`;
-        watchlistStatus.style.color = "#d9852b";
-      }
-
-    } catch (err) {
-      console.error("批量更新過程發生未預期錯誤:", err);
-      watchlistStatus.textContent = "❌ 批量更新失敗，請檢查網路或 API 狀態。";
-      watchlistStatus.style.color = "var(--red, #c94b4b)";
-    } finally {
-      btnWatchlist.disabled = false;
-    }
-  });
+// 分批執行異步請求，防止觸發 Rate Limit
+async function fetchInBatches(symbols, batchSize = 5) {
+  const results = [];
+  for (let i = 0; i < symbols.length; i += batchSize) {
+    const batch = symbols.slice(i, i + batchSize);
+    const batchResults = await Promise.allSettled(batch.map(sym => fetchLevelForWatchlist(sym)));
+    results.push(...batchResults);
+  }
+  return results;
 }
 
 function updateWatchlistDisplay() {
-  if (!scannedWatchlistCache || scannedWatchlistCache.length === 0) return;
+  if (!watchlistResult) return;
+  if (!scannedWatchlistCache || scannedWatchlistCache.length === 0) {
+    watchlistResult.innerHTML = `<div style="color:var(--muted); font-size:0.85rem; padding:12px; text-align:center;">目前無觀察清單資料</div>`;
+    return;
+  }
 
   const searchQuery = watchlistSearch ? watchlistSearch.value.trim().toLowerCase() : "";
   const filterZone = watchlistFilterZone ? watchlistFilterZone.value : "all";
@@ -676,7 +638,6 @@ function updateWatchlistDisplay() {
     const dictName = getStockName(item.sym);
     const apiName = item.name || "";
     
-    // 關鍵字搜尋：代號、字典名稱或 OpenData 下載的 API 名稱
     const matchSearch = item.sym.toLowerCase().includes(searchQuery) || 
                         dictName.toLowerCase().includes(searchQuery) ||
                         apiName.toLowerCase().includes(searchQuery);
@@ -751,7 +712,6 @@ function updateWatchlistDisplay() {
     const nearest = getNearestLevel(item.last);
     const nearestHint = formatNearestText(nearest);
 
-    // 優先帶出從後端自動抓取的中文名稱
     const displayName = item.name || getStockName(item.sym) || "";
 
     card.innerHTML = `
@@ -788,292 +748,355 @@ function updateWatchlistDisplay() {
         rawSym = rawSym.replace(".TW", "");
       }
       
-      symbolInput.value = rawSym;
-      market.value = mktVal;
-      fetchSymbolBtn.click();
+      if (symbolInput) symbolInput.value = rawSym;
+      if (market) market.value = mktVal;
+      if (fetchSymbolBtn) fetchSymbolBtn.click();
     });
 
     watchlistResult.appendChild(card);
   });
 }
 
-// ------------------------------------------
-// 9. 個股查詢與單一操作邏輯
-// ------------------------------------------
-if (fetchSymbolBtn) {
-  fetchSymbolBtn.addEventListener("click", async () => {
-    fetchStatus.textContent = "讀取中...";
-    let inputVal = symbolInput.value.trim().toUpperCase();
-    let selectedMarket = market.value;
+// 事件綁定統一管理
+function bindEvents() {
+  if (btnWatchlist) {
+    btnWatchlist.addEventListener("click", async () => {
+      const rawInput = watchlistInput.value;
+      localStorage.setItem("lohas_watchlist", rawInput);
 
-    try {
-      const p = new URLSearchParams({ 
-        symbol: inputVal, 
-        market: selectedMarket, 
-        years: periodYears.value 
-      });
-      
-      const res = await fetch(`/api/yahoo?${p.toString()}`);
-      if (!res.ok) throw new Error();
-      const json = await res.json();
-      csvInput.value = JSON.stringify(json.rows);
-      
-      if (chartTitle) {
-        chartTitle.textContent = formatSymbolDisplay(json.symbol, json.name);
-      }
-      
-      if (btnAddToWatchlist) {
-        btnAddToWatchlist.style.display = "inline-block";
+      const syms = rawInput
+        .split(",")
+        .map(s => s.trim().toUpperCase())
+        .filter(s => s.length > 0)
+        .slice(0, MAX_WATCHLIST_LIMIT);
+
+      if (syms.length === 0) {
+        watchlistStatus.textContent = "⚠️ 請輸入有效的股票代碼！";
+        watchlistStatus.style.color = "var(--red, #c94b4b)";
+        return;
       }
 
-      loadMainChipData(inputVal);
-      render();
-
-      fetchStatus.textContent = "成功";
-      localStorage.setItem("lohas_last_symbol", inputVal);
-      localStorage.setItem("lohas_last_market", selectedMarket);
-    } catch (err) { 
-      fetchStatus.textContent = "失敗"; 
-      console.error("Fetch 錯誤資訊:", err);
-    }
-  });
-}
-
-// ------------------------------------------
-// 10.【功能一】：圖表標題旁「⭐ 加入觀察清單」按鈕
-// ------------------------------------------
-if (btnAddToWatchlist) {
-  btnAddToWatchlist.addEventListener("click", async () => {
-    const rawSym = symbolInput.value.trim().toUpperCase();
-    if (!rawSym) {
-      alert("⚠️ 請先輸入股票代碼！");
-      return;
-    }
-
-    const currentText = watchlistInput.value || "";
-    const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
-
-    if (syms.includes(rawSym)) {
-      alert(`⚠️ 股號 ${rawSym} 已在觀察清單中！`);
-      return;
-    }
-
-    if (syms.length >= MAX_WATCHLIST_LIMIT) {
-      alert(`⚠️ 觀察清單最多只能 ${MAX_WATCHLIST_LIMIT} 支股票！`);
-      return;
-    }
-
-    syms.push(rawSym);
-    watchlistInput.value = syms.join(", ");
-    localStorage.setItem("lohas_watchlist", watchlistInput.value);
-
-    updateRemoveSelect();
-    
-    try {
-      const data = await fetchLevelForWatchlist(rawSym);
-      scannedWatchlistCache = scannedWatchlistCache.filter(item => {
-        const symClean = item.sym.replace(".TW", "").replace(".TWO", "").toUpperCase();
-        return symClean !== rawSym;
-      });
-      scannedWatchlistCache.push(data);
-      updateWatchlistDisplay();
-      saveWatchlistCache();
-      alert(`✅ 已成功將 ${rawSym} 加入觀察清單！`);
-    } catch (err) {
-      alert(`✅ 已將 ${rawSym} 加入清單，請至下方點擊「執行批量掃描更新」。`);
-    }
-  });
-}
-
-// ------------------------------------------
-// 11. 單一新增 / 刪除個股邏輯
-// ------------------------------------------
-if (btnAddWatchlistSingle) {
-  btnAddWatchlistSingle.addEventListener("click", async () => {
-    const newSym = addWatchlistInput.value.trim().toUpperCase();
-    if (!newSym) return;
-    
-    const currentText = watchlistInput.value || "";
-    const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
-    
-    if (syms.includes(newSym)) {
-      watchlistStatus.textContent = `⚠️ 股號 ${newSym} 已在清單中！`;
-      return;
-    }
-    
-    if (syms.length >= MAX_WATCHLIST_LIMIT) {
-      watchlistStatus.textContent = `⚠️ 監控清單最多只能 ${MAX_WATCHLIST_LIMIT} 支股票喔！`;
-      return;
-    }
-    
-    syms.push(newSym);
-    watchlistInput.value = syms.join(", ");
-    localStorage.setItem("lohas_watchlist", watchlistInput.value);
-    addWatchlistInput.value = "";
-    
-    updateRemoveSelect();
-    watchlistStatus.textContent = `➕ 正在即時新增並計算 ${newSym}...`;
-    
-    try {
-      const data = await fetchLevelForWatchlist(newSym);
-      scannedWatchlistCache = scannedWatchlistCache.filter(item => {
-        const symClean = item.sym.replace(".TW", "").replace(".TWO", "").toUpperCase();
-        return symClean !== newSym;
-      });
-      scannedWatchlistCache.push(data);
-      updateWatchlistDisplay();
-      
-      saveWatchlistCache();
-      watchlistStatus.textContent = `✅ 已成功新增 ${newSym}！`;
-      watchlistStatus.style.color = "var(--blue)";
-    } catch (err) {
-      watchlistStatus.textContent = `❌ 即時新增 ${newSym} 失敗，請點擊「執行批量更新」。`;
-    }
-  });
-}
-
-if (btnRemoveWatchlistSingle) {
-  btnRemoveWatchlistSingle.addEventListener("click", () => {
-    const toRemove = removeWatchlistSelect.value;
-    if (!toRemove || toRemove === "📭 清單為空") return;
-    
-    const currentText = watchlistInput.value || "";
-    const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
-    
-    const filtered = syms.filter(s => s !== toRemove);
-    watchlistInput.value = filtered.join(", ");
-    localStorage.setItem("lohas_watchlist", filtered.join(", "));
-    
-    updateRemoveSelect();
-    watchlistStatus.textContent = `➖ 已刪除 ${toRemove}`;
-    watchlistStatus.style.color = "var(--blue)";
-    
-    scannedWatchlistCache = scannedWatchlistCache.filter(item => {
-      const symClean = item.sym.replace(".TW", "").replace(".TWO", "").toUpperCase();
-      return symClean !== toRemove;
-    });
-    updateWatchlistDisplay();
-    saveWatchlistCache();
-  });
-}
-
-if (btnClearWatchlist) {
-  btnClearWatchlist.addEventListener("click", () => {
-    if (btnClearWatchlist.textContent.includes("全部清除")) {
-      deletedWatchlistBackup = watchlistInput.value;
-      watchlistInput.value = "";
-      localStorage.removeItem("lohas_watchlist");
-      localStorage.removeItem("lohas_watchlist_cache_data");
-      localStorage.removeItem("lohas_watchlist_cache_time");
       watchlistResult.innerHTML = "";
       scannedWatchlistCache = [];
-      watchlistStatus.textContent = "🧹 已暫時清除，可點擊按鈕復原";
+      btnWatchlist.disabled = true;
+
+      watchlistStatus.textContent = `🔄 正在批量更新 ${syms.length} 支股票（分批讀取中）...`;
       watchlistStatus.style.color = "var(--blue)";
-      
-      btnClearWatchlist.textContent = "↩️ 復原清除清單";
-      btnClearWatchlist.style.backgroundColor = "#d9852b"; 
 
-      if (watchlistSort) watchlistSort.value = "rankDesc";
-    } else {
-      if (deletedWatchlistBackup) {
-        watchlistInput.value = deletedWatchlistBackup;
-        localStorage.setItem("lohas_watchlist", deletedWatchlistBackup);
-        watchlistStatus.textContent = "↩️ 已成功復原清單！";
+      try {
+        const results = await fetchInBatches(syms, 5);
+
+        let successCount = 0;
+        let failCount = 0;
+
+        results.forEach((result, index) => {
+          if (result.status === "fulfilled") {
+            scannedWatchlistCache.push(result.value);
+            successCount++;
+          } else {
+            failCount++;
+            console.error(`❌ 股票 ${syms[index]} 抓取失敗:`, result.reason);
+          }
+        });
+
+        updateWatchlistDisplay();
+        saveWatchlistCache();
+
+        if (failCount === 0) {
+          watchlistStatus.textContent = `✅ 更新完成 (共 ${successCount} 檔)`;
+          watchlistStatus.style.color = "var(--blue)";
+        } else {
+          watchlistStatus.textContent = `⚠️ 更新完成：成功 ${successCount} 檔，失敗 ${failCount} 檔`;
+          watchlistStatus.style.color = "#d9852b";
+        }
+
+      } catch (err) {
+        console.error("批量更新過程發生未預期錯誤:", err);
+        watchlistStatus.textContent = "❌ 批量更新失敗，請檢查網路或 API 狀態。";
+        watchlistStatus.style.color = "var(--red, #c94b4b)";
+      } finally {
+        btnWatchlist.disabled = false;
       }
-      btnClearWatchlist.textContent = "🧹 全部清除";
-      btnClearWatchlist.style.backgroundColor = "#667085";
-    }
-    updateRemoveSelect();
-  });
-}
+    });
+  }
 
-// ------------------------------------------
-// 12. 複製與智慧併集合併匯入
-// ------------------------------------------
-if (btnExportWatchlist) {
-  btnExportWatchlist.addEventListener("click", (e) => {
-    e.preventDefault();
-    const currentText = watchlistInput.value.trim();
-    if (!currentText) {
-      if (watchlistStatus) watchlistStatus.textContent = "⚠️ 目前清單是空的，無法複製喔！";
-      return;
-    }
-    
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(currentText).then(() => {
-        if (watchlistStatus) watchlistStatus.textContent = "📋 清單已自動複製到剪貼簿！可傳送至手機/其他裝置匯入。";
-      }).catch(() => {
+  // 個股查詢與單一操作邏輯
+  if (fetchSymbolBtn) {
+    fetchSymbolBtn.addEventListener("click", async () => {
+      if (fetchStatus) fetchStatus.textContent = "讀取中...";
+      let inputVal = symbolInput.value.trim().toUpperCase();
+      let selectedMarket = market.value;
+
+      try {
+        const p = new URLSearchParams({ 
+          symbol: inputVal, 
+          market: selectedMarket, 
+          years: periodYears ? periodYears.value : "3.5" 
+        });
+        
+        const res = await fetch(`/api/yahoo?${p.toString()}`);
+        if (!res.ok) throw new Error();
+        const json = await res.json();
+        if (csvInput) csvInput.value = JSON.stringify(json.rows);
+        
+        if (chartTitle) {
+          chartTitle.textContent = formatSymbolDisplay(json.symbol, json.name);
+        }
+        
+        if (btnAddToWatchlist) {
+          btnAddToWatchlist.style.display = "inline-block";
+        }
+
+        loadMainChipData(inputVal);
+        render();
+
+        if (fetchStatus) fetchStatus.textContent = "成功";
+        localStorage.setItem("lohas_last_symbol", inputVal);
+        localStorage.setItem("lohas_last_market", selectedMarket);
+      } catch (err) { 
+        if (fetchStatus) fetchStatus.textContent = "失敗"; 
+        console.error("Fetch 錯誤資訊:", err);
+      }
+    });
+  }
+
+  // 圖表標題旁「⭐ 加入觀察清單」按鈕
+  if (btnAddToWatchlist) {
+    btnAddToWatchlist.addEventListener("click", async () => {
+      const rawSym = symbolInput.value.trim().toUpperCase();
+      if (!rawSym) {
+        alert("⚠️ 請先輸入股票代碼！");
+        return;
+      }
+
+      const currentText = watchlistInput.value || "";
+      const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+
+      if (syms.includes(rawSym)) {
+        alert(`⚠️ 股號 ${rawSym} 已在觀察清單中！`);
+        return;
+      }
+
+      if (syms.length >= MAX_WATCHLIST_LIMIT) {
+        alert(`⚠️ 觀察清單最多只能 ${MAX_WATCHLIST_LIMIT} 支股票！`);
+        return;
+      }
+
+      syms.push(rawSym);
+      watchlistInput.value = syms.join(", ");
+      localStorage.setItem("lohas_watchlist", watchlistInput.value);
+
+      updateRemoveSelect();
+      
+      try {
+        const data = await fetchLevelForWatchlist(rawSym);
+        scannedWatchlistCache = scannedWatchlistCache.filter(item => {
+          const symClean = item.sym.replace(".TW", "").replace(".TWO", "").toUpperCase();
+          return symClean !== rawSym;
+        });
+        scannedWatchlistCache.push(data);
+        updateWatchlistDisplay();
+        saveWatchlistCache();
+        alert(`✅ 已成功將 ${rawSym} 加入觀察清單！`);
+      } catch (err) {
+        alert(`✅ 已將 ${rawSym} 加入清單，請至下方點擊「執行批量掃描更新」。`);
+      }
+    });
+  }
+
+  // 單一新增個股邏輯
+  if (btnAddWatchlistSingle) {
+    btnAddWatchlistSingle.addEventListener("click", async () => {
+      const newSym = addWatchlistInput.value.trim().toUpperCase();
+      if (!newSym) return;
+      
+      const currentText = watchlistInput.value || "";
+      const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+      
+      if (syms.includes(newSym)) {
+        if (watchlistStatus) watchlistStatus.textContent = `⚠️ 股號 ${newSym} 已在清單中！`;
+        return;
+      }
+      
+      if (syms.length >= MAX_WATCHLIST_LIMIT) {
+        if (watchlistStatus) watchlistStatus.textContent = `⚠️ 監控清單最多只能 ${MAX_WATCHLIST_LIMIT} 支股票喔！`;
+        return;
+      }
+      
+      syms.push(newSym);
+      watchlistInput.value = syms.join(", ");
+      localStorage.setItem("lohas_watchlist", watchlistInput.value);
+      addWatchlistInput.value = "";
+      
+      updateRemoveSelect();
+      if (watchlistStatus) watchlistStatus.textContent = `➕ 正在即時新增並計算 ${newSym}...`;
+      
+      try {
+        const data = await fetchLevelForWatchlist(newSym);
+        scannedWatchlistCache = scannedWatchlistCache.filter(item => {
+          const symClean = item.sym.replace(".TW", "").replace(".TWO", "").toUpperCase();
+          return symClean !== newSym;
+        });
+        scannedWatchlistCache.push(data);
+        updateWatchlistDisplay();
+        
+        saveWatchlistCache();
+        if (watchlistStatus) {
+          watchlistStatus.textContent = `✅ 已成功新增 ${newSym}！`;
+          watchlistStatus.style.color = "var(--blue)";
+        }
+      } catch (err) {
+        if (watchlistStatus) watchlistStatus.textContent = `❌ 即時新增 ${newSym} 失敗，請點擊「執行批量更新」。`;
+      }
+    });
+  }
+
+  // 單一刪除個股邏輯
+  if (btnRemoveWatchlistSingle) {
+    btnRemoveWatchlistSingle.addEventListener("click", () => {
+      const toRemove = removeWatchlistSelect.value;
+      if (!toRemove || toRemove === "📭 清單為空") return;
+      
+      const currentText = watchlistInput.value || "";
+      const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+      
+      const filtered = syms.filter(s => s !== toRemove);
+      watchlistInput.value = filtered.join(", ");
+      localStorage.setItem("lohas_watchlist", filtered.join(", "));
+      
+      updateRemoveSelect();
+      if (watchlistStatus) {
+        watchlistStatus.textContent = `➖ 已刪除 ${toRemove}`;
+        watchlistStatus.style.color = "var(--blue)";
+      }
+      
+      scannedWatchlistCache = scannedWatchlistCache.filter(item => {
+        const symClean = item.sym.replace(".TW", "").replace(".TWO", "").toUpperCase();
+        return symClean !== toRemove;
+      });
+      updateWatchlistDisplay();
+      saveWatchlistCache();
+    });
+  }
+
+  // 全部清除 / 復原清單
+  if (btnClearWatchlist) {
+    btnClearWatchlist.addEventListener("click", () => {
+      if (btnClearWatchlist.textContent.includes("全部清除")) {
+        deletedWatchlistBackup = watchlistInput.value;
+        watchlistInput.value = "";
+        localStorage.removeItem("lohas_watchlist");
+        localStorage.removeItem("lohas_watchlist_cache_data");
+        localStorage.removeItem("lohas_watchlist_cache_time");
+        watchlistResult.innerHTML = "";
+        scannedWatchlistCache = [];
+        if (watchlistStatus) {
+          watchlistStatus.textContent = "🧹 已暫時清除，可點擊按鈕復原";
+          watchlistStatus.style.color = "var(--blue)";
+        }
+        
+        btnClearWatchlist.textContent = "↩️ 復原清除清單";
+        btnClearWatchlist.style.backgroundColor = "#d9852b"; 
+
+        if (watchlistSort) watchlistSort.value = "rankDesc";
+      } else {
+        if (deletedWatchlistBackup) {
+          watchlistInput.value = deletedWatchlistBackup;
+          localStorage.setItem("lohas_watchlist", deletedWatchlistBackup);
+          if (watchlistStatus) watchlistStatus.textContent = "↩️ 已成功復原清單！";
+        }
+        btnClearWatchlist.textContent = "🧹 全部清除";
+        btnClearWatchlist.style.backgroundColor = "#667085";
+      }
+      updateRemoveSelect();
+    });
+  }
+
+  // 複製與智慧併集合併匯入
+  if (btnExportWatchlist) {
+    btnExportWatchlist.addEventListener("click", (e) => {
+      e.preventDefault();
+      const currentText = watchlistInput.value.trim();
+      if (!currentText) {
+        if (watchlistStatus) watchlistStatus.textContent = "⚠️ 目前清單是空的，無法複製喔！";
+        return;
+      }
+      
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(currentText).then(() => {
+          if (watchlistStatus) watchlistStatus.textContent = "📋 清單已自動複製到剪貼簿！可傳送至手機/其他裝置匯入。";
+        }).catch(() => {
+          watchlistInput.select();
+          document.execCommand("copy");
+          if (watchlistStatus) watchlistStatus.textContent = "📋 清單已複製到剪貼簿！";
+        });
+      } else {
         watchlistInput.select();
         document.execCommand("copy");
         if (watchlistStatus) watchlistStatus.textContent = "📋 清單已複製到剪貼簿！";
-      });
-    } else {
-      watchlistInput.select();
-      document.execCommand("copy");
-      if (watchlistStatus) watchlistStatus.textContent = "📋 清單已複製到剪貼簿！";
-    }
-  });
-}
+      }
+    });
+  }
 
-if (btnImportWatchlist) {
-  btnImportWatchlist.addEventListener("click", (e) => {
-    e.preventDefault();
-    const userInput = prompt("請貼上您要匯入的股票代號（例如: 2330, 2317, 2454）：");
-    if (userInput === null) return;
-    
-    const existingSyms = (watchlistInput.value || "")
-      .split(",")
-      .map(s => s.trim().toUpperCase())
-      .filter(s => s);
+  if (btnImportWatchlist) {
+    btnImportWatchlist.addEventListener("click", (e) => {
+      e.preventDefault();
+      const userInput = prompt("請貼上您要匯入的股票代號（例如: 2330, 2317, 2454）：");
+      if (userInput === null) return;
+      
+      const existingSyms = (watchlistInput.value || "")
+        .split(",")
+        .map(s => s.trim().toUpperCase())
+        .filter(s => s);
 
-    const importedSyms = userInput
-      .split(",")
-      .map(s => s.trim().toUpperCase())
-      .filter(s => s);
+      const importedSyms = userInput
+        .split(",")
+        .map(s => s.trim().toUpperCase())
+        .filter(s => s);
 
-    if (importedSyms.length === 0) {
-      alert("⚠️ 輸入內容無有效股票代碼！");
-      return;
-    }
+      if (importedSyms.length === 0) {
+        alert("⚠️ 輸入內容無有效股票代碼！");
+        return;
+      }
 
-    const mergedSet = new Set([...existingSyms, ...importedSyms]);
-    const mergedList = Array.from(mergedSet);
+      const mergedSet = new Set([...existingSyms, ...importedSyms]);
+      const mergedList = Array.from(mergedSet);
 
-    if (mergedList.length > MAX_WATCHLIST_LIMIT) {
-      alert(`⚠️ 合併後數量超過 ${MAX_WATCHLIST_LIMIT} 支上限，將自動截取保留前 ${MAX_WATCHLIST_LIMIT} 支股票。`);
-      mergedList.length = MAX_WATCHLIST_LIMIT;
-    }
+      if (mergedList.length > MAX_WATCHLIST_LIMIT) {
+        alert(`⚠️ 合併後數量超過 ${MAX_WATCHLIST_LIMIT} 支上限，將自動截取保留前 ${MAX_WATCHLIST_LIMIT} 支股票。`);
+        mergedList.length = MAX_WATCHLIST_LIMIT;
+      }
 
-    watchlistInput.value = mergedList.join(", ");
-    localStorage.setItem("lohas_watchlist", watchlistInput.value);
+      watchlistInput.value = mergedList.join(", ");
+      localStorage.setItem("lohas_watchlist", watchlistInput.value);
 
-    updateRemoveSelect();
+      updateRemoveSelect();
 
-    const addedCount = mergedList.length - existingSyms.length;
-    if (watchlistStatus) {
-      watchlistStatus.textContent = `📥 併集合併完成！共 ${mergedList.length} 檔 (新增 ${addedCount > 0 ? addedCount : 0} 檔)。請點擊「執行批量掃描更新」。`;
-      watchlistStatus.style.color = "var(--blue)";
-    }
-    
-    alert(`✅ 清單併集合併成功！\n原清單: ${existingSyms.length} 支\n新增: ${addedCount > 0 ? addedCount : 0} 支\n合併後總計: ${mergedList.length} 支股票。\n\n請點擊「執行批量掃描更新」以載入最新數據。`);
-  });
-}
+      const addedCount = mergedList.length - existingSyms.length;
+      if (watchlistStatus) {
+        watchlistStatus.textContent = `📥 併集合併完成！共 ${mergedList.length} 檔 (新增 ${addedCount > 0 ? addedCount : 0} 檔)。請點擊「執行批量掃描更新」。`;
+        watchlistStatus.style.color = "var(--blue)";
+      }
+      
+      alert(`✅ 清單併集合併成功！\n原清單: ${existingSyms.length} 支\n新增: ${addedCount > 0 ? addedCount : 0} 支\n合併後總計: ${mergedList.length} 支股票。\n\n請點擊「執行批量掃描更新」以載入最新數據。`);
+    });
+  }
 
-// ------------------------------------------
-// 13. 模擬範例數據按鈕
-// ------------------------------------------
-if (document.querySelector("#sampleBtn")) {
-  document.querySelector("#sampleBtn").addEventListener("click", () => {
-    const mock = []; 
-    let p = 100;
-    for(let i = 0; i < 300; i++) {
-      mock.push({ 
-        date: new Date(Date.now() - (300 - i) * 86400000).toISOString().split('T')[0], 
-        close: p += (Math.random() - 0.48) 
-      });
-    }
-    csvInput.value = JSON.stringify(mock);
-    if (chartTitle) chartTitle.textContent = "模擬範例股票";
-    render();
-  });
+  // 模擬範例數據按鈕
+  const sampleBtn = document.querySelector("#sampleBtn");
+  if (sampleBtn) {
+    sampleBtn.addEventListener("click", () => {
+      const mock = []; 
+      let p = 100;
+      for(let i = 0; i < 300; i++) {
+        mock.push({ 
+          date: new Date(Date.now() - (300 - i) * 86400000).toISOString().split('T')[0], 
+          close: p += (Math.random() - 0.48) 
+        });
+      }
+      if (csvInput) csvInput.value = JSON.stringify(mock);
+      if (chartTitle) chartTitle.textContent = "模擬範例股票";
+      render();
+    });
+  }
 }

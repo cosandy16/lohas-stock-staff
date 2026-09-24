@@ -31,32 +31,34 @@ def update_stock_names_from_api():
     new_map = {}
     
     # 1. 證交所 (上市股票 & ETF)
-    twse_url = "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL"
-    try:
-        req = urllib.request.Request(twse_url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=10, context=ssl_ctx) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            for item in data:
-                code = item.get("Code", "").strip()
-                name = item.get("Name", "").strip()
-                if code and name:
-                    new_map[code] = name
-        print(f"✅ [TWSE API] 成功更新證交所標的共 {len(data)} 筆")
-    except Exception as e:
-        print(f"⚠️ [TWSE API] 下載上市清單失敗: {e}")
+    twse_urls = [
+        "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL",
+        "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
+    ]
+    for twse_url in twse_urls:
+        try:
+            req = urllib.request.Request(twse_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=8, context=ssl_ctx) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                for item in data:
+                    code = (item.get("Code") or item.get("公司代號") or "").strip()
+                    name = (item.get("Name") or item.get("公司名稱") or item.get("公司簡稱") or "").strip()
+                    if code and name:
+                        new_map[code] = name
+        except Exception as e:
+            print(f"⚠️ [TWSE API] 嘗試下載上市清單失敗 ({twse_url}): {e}")
 
     # 2. 櫃買中心 (上櫃股票 & ETF)
     tpex_url = "https://www.tpex.org.tw/openapi/v1/mops_all_01"
     try:
         req = urllib.request.Request(tpex_url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=10, context=ssl_ctx) as resp:
+        with urllib.request.urlopen(req, timeout=8, context=ssl_ctx) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             for item in data:
                 code = item.get("SecuritiesCompanyCode", "").strip()
                 name = item.get("CompanyName", "").strip() or item.get("CompanyAbbreviation", "").strip()
                 if code and name:
                     new_map[code] = name
-        print(f"✅ [TPEx API] 成功更新櫃買中心標的")
     except Exception as e:
         print(f"⚠️ [TPEx API] 下載上櫃清單失敗: {e}")
 
@@ -87,7 +89,8 @@ def parse_num_to_sheets(val):
 # ---------------------------------------------------------
 def fetch_finmind_chip(symbol_code):
     today = datetime.date.today()
-    start_date = (today - datetime.timedelta(days=10)).strftime("%Y-%m-%d")
+    # 延伸至 15 天以應付春節連假
+    start_date = (today - datetime.timedelta(days=15)).strftime("%Y-%m-%d")
     url = f"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInstitutionalInvestorsBuySell&data_id={symbol_code}&start_date={start_date}"
 
     req = urllib.request.Request(
@@ -155,7 +158,7 @@ def fetch_finmind_chip(symbol_code):
             "total": f_diff + t_diff + d_diff,
         }
     except Exception as e:
-        print(f"⚠️ FinMind API 擷取失敗: {e}")
+        print(f"⚠️ FinMind API 擷取失敗 ({symbol_code}): {e}")
     return None
 
 def fetch_twse_openapi(symbol_code):
@@ -197,7 +200,7 @@ def fetch_twse_openapi(symbol_code):
 
 def fetch_chip_data(raw_symbol):
     symbol_code = raw_symbol.split(".")[0].strip().upper()
-    print(f"📡 [Render Cloud] 正在查詢 [{symbol_code}] 最新三大法人盤後籌碼...")
+    print(f"📡 正在查詢 [{symbol_code}] 最新三大法人盤後籌碼...")
 
     res = fetch_finmind_chip(symbol_code)
     if res:
