@@ -4,86 +4,33 @@
 
 const MAX_WATCHLIST_LIMIT = 40;
 
-// 2. 頁面載入時動態更新 HTML 標題
-document.addEventListener("DOMContentLoaded", () => {
+// 1. 動態字典：初始化時自動從後端 API 下載全台股/ETF名稱
+let TW_STOCK_NAMES = {};
+
+async function fetchStockNames() {
+  try {
+    const res = await fetch("/api/names");
+    if (res.ok) {
+      TW_STOCK_NAMES = await res.json();
+      console.log(`✅ 已自動同步 ${Object.keys(TW_STOCK_NAMES).length} 檔最新台股/ETF名稱清單`);
+    }
+  } catch (e) {
+    console.error("無法同步最新股票清單，將使用 API 即時帶出的名稱", e);
+  }
+}
+
+// 頁面載入時初始化
+document.addEventListener("DOMContentLoaded", async () => {
   const watchlistTitle = document.getElementById("watchlistTitle");
   if (watchlistTitle) {
     watchlistTitle.textContent = `📋 ${MAX_WATCHLIST_LIMIT} 檔個股巡邏監控`;
   }
+  
+  // 啟動時向後端取得最新的名稱對照表
+  await fetchStockNames();
 });
 
-// ------------------------------------------
-// 1. 靜態資料字典與基本面資料
-// ------------------------------------------
-const TW_STOCK_NAMES = {
-  // --- 圖片中缺少的個股與 ETF 補全 ---
-  "1477":"聚陽", "1795":"美時", "2480":"敦陽科", "3023":"信邦", 
-  "3147":"大綜", "3551":"世禾", "5340":"建榮", "5439":"高技", "9911":"櫻花",
-  "0050":"元大台灣50", "0056":"元大高股息", "00878":"國泰永續高股息", 
-  "00919":"群益台灣精選高息", "00929":"復華台灣科技優息", "00940":"元大台灣價值高息",
-  "00881":"國泰台灣5G+", "00646":"元大S&P500", "009816":"凱基台灣TOP50",
-
-  // --- 既有常見台股字典 ---
-  "1101":"台泥","1102":"亞泥","1216":"統一","1301":"台塑","1303":"南亞","1326":"台化",
-  "1402":"遠東新","1476":"儒鴻","1504":"東元","1590":"亞德客","1605":"華新",
-  "2002":"中鋼","2006":"東和鋼鐵","2015":"豐興","2049":"上銀","2059":"川湖",
-  "2101":"南港","2105":"正新","2207":"和泰車","2227":"裕日車","2231":"為升",
-  "2301":"光寶科","2303":"聯電","2308":"台達電","2312":"金寶","2317":"鴻海",
-  "2324":"仁寶","2327":"國巨","2330":"台積電","2337":"旺宏","2344":"華邦電",
-  "2347":"聯強","2352":"佳世達","2353":"宏碁","2354":"鴻準","2356":"英業達",
-  "2357":"華碩","2358":"廷鑫","2360":"致茂","2363":"矽統","2371":"大同",
-  "2376":"技嘉","2377":"微星","2379":"瑞昱","2382":"廣達","2383":"台光電",
-  "2385":"群光","2388":"威盛","2392":"正崴","2393":"億光","2395":"研華",
-  "2397":"友通","2399":"映泰","2401":"聯陽","2404":"漢唐","2408":"南亞科",
-  "2409":"友達","2412":"中華電","2414":"精技","2420":"新日興","2423":"固緯",
-  "2426":"鑫創","2429":"銘異","2430":"燦坤","2439":"美律","2441":"超豐",
-  "2449":"京元電","2454":"聯發科","2458":"義隆","2474":"可成","2475":"矽創",
-  "2481":"強茂","2489":"瑞軒","2492":"華新科","2496":"卓越","2498":"宏達電",
-  "2501":"國建","2502":"長谷","2542":"興富發","2545":"皇翔","2548":"華固",
-  "2601":"益航","2603":"長榮","2606":"裕民","2609":"陽明","2610":"華航",
-  "2615":"萬海","2618":"長榮航","2707":"晶華","2727":"王品","2731":"雄獅",
-  "2809":"京城銀","2812":"台中銀","2820":"華泰銀","2834":"臺企銀","2836":"安泰銀",
-  "2838":"聯邦銀","2845":"遠東銀","2849":"安泰金","2850":"新產","2851":"中再保",
-  "2852":"第一保","2880":"華南金","2881":"富邦金","2882":"國泰金","2883":"開發金",
-  "2884":"玉山金","2885":"元大金","2886":"兆豐金","2887":"台新金","2888":"新光金",
-  "2889":"國票金","2890":"永豐金","2891":"中信金","2892":"第一金","2912":"統一超",
-  "3008":"大立光","3014":"聯陽","3017":"奇鋐","3019":"亞泰","3022":"威剛",
-  "3029":"零壹","3034":"聯詠","3035":"智原","3037":"欣興","3041":"揚智",
-  "3042":"晶技","3044":"健鼎","3045":"台灣大","3046":"建碁","3047":"訊舟",
-  "3051":"力特","3052":"夆典","3054":"立積","3057":"喬鼎","3058":"立誠",
-  "3059":"鴻鈞","3085":"比比昂","3086":"華義","3088":"艾雷斯","3094":"聯傑",
-  "3105":"穩懋","3106":"楊博","3130":"一零四","3149":"正達","3150":"萬達通",
-  "3189":"景碩","3231":"緯創","3234":"光環","3293":"鈊象","3294":"英濟",
-  "3406":"玉晶光","3443":"創意","3481":"群創","3504":"揚明光","3529":"力旺",
-  "3533":"嘉澤","3545":"旭隼","3673":"TPK","3682":"亞太電","3689":"湧德",
-  "3698":"隆達","3702":"大聯大","3706":"神達","3711":"日月光投控","3714":"富采",
-  "3715":"定穎投控","3726":"皇電","3760":"泓格","3762":"鑫龍騰","3769":"楠梓電",
-  "3776":"長科","4104":"佳醫","4108":"懷特","4137":"麗豐-KY","4147":"中裕",
-  "4148":"全宇生技","4164":"基亞","4174":"浩鼎","4180":"嘉進","4183":"福永興",
-  "4205":"中華食","4303":"信立","4438":"廣越","4509":"恒耀","4551":"智崴",
-  "4966":"譜瑞-KY","5007":"三星","5009":"榮剛","5014":"中連貨","5015":"華祺",
-  "5016":"鑠禧","5212":"凌網","5215":"科定","5234":"達興材料","5288":"豐藝",
-  "5347":"世界","5349":"先豐","5371":"中光電","5381":"合正","5388":"中磊",
-  "5398":"拓墣","5434":"崇越電","5522":"遠雄","5533":"皇昌","5536":"聖暉",
-  "5538":"東明","5546":"永信建","5608":"四維航","5871":"中租-KY","5876":"上海商銀",
-  "5880":"合庫金","6005":"群益證","6104":"創惟","6112":"聚碩","6116":"彩晶",
-  "6121":"新普","6133":"金橋","6153":"嘉聯益","6196":"帆宣","6197":"佳必義",
-  "6201":"亞弘電","6202":"盛群","6204":"艾訊","6208":"日揚","6215":"和椿",
-  "6216":"居易","6220":"岱稜","6225":"旺矽","6230":"超眾","6239":"力成",
-  "6243":"迅杰","6257":"矽瑪","6261":"久元","6262":"倚天酷碁","6269":"台郡",
-  "6271":"同欣電","6274":"台燿","6278":"台表科","6279":"胡連","6281":"全國電",
-  "6282":"康舒","6285":"啟碁","6290":"良維","6291":"沛亨","6294":"智晶",
-  "6295":"捷力","6355":"信紘科","6409":"旭隼","6414":"樺漢","6415":"矽力-KY",
-  "6416":"瑞祺電通","6488":"環球晶","6505":"台塑化","6510":"精測","6515":"穎崴",
-  "6516":"勤誠","6533":"晶心科","6592":"和潤企業","6605":"帝寶","6618":"台康生技",
-  "6625":"必應","6669":"緯穎","6679":"台嘉碩","6691":"洋基工程","6719":"力旺",
-  "6770":"力積電","8046":"南電","8048":"德勝","8050":"廣積","8069":"元太",
-  "8086":"宏捷科","8150":"南茂","8215":"明基材","8299":"群聯","8341":"日友",
-  "8410":"森崴能源","8422":"可寧衛","8436":"大江","8437":"大學光","8448":"遠傳",
-  "8454":"富邦媒","9904":"寶成","9910":"豐泰","9917":"中保科","9921":"巨大",
-  "9933":"中鼎","9938":"百和","9939":"宏全","9945":"潤泰全"
-};
-
+// 基本面資料字典
 const STOCK_FUNDAMENTALS = {
   "1101": { eps: 2.2, dividend: 1.5 },
   "1102": { eps: 2.8, dividend: 2.1 },
@@ -180,8 +127,8 @@ function getStockName(symbol) {
   return TW_STOCK_NAMES[code] || "";
 }
 
-function formatSymbolDisplay(symbol) {
-  const name = getStockName(symbol);
+function formatSymbolDisplay(symbol, nameOverride) {
+  const name = nameOverride || getStockName(symbol);
   return name ? `${symbol} ${name}` : symbol;
 }
 
@@ -395,7 +342,7 @@ function buildAnalysis(data, currentMode = (modelMode ? modelMode.value : "linea
 }
 
 // ------------------------------------------
-// 6. 圖表渲染 (SVG + Tooltip)
+// 6. 圖表渲染
 // ------------------------------------------
 function renderChart(analysis) {
   if (!chart) return;
@@ -642,8 +589,8 @@ async function fetchLevelForWatchlist(symbol) {
   const chipData = chipRes.status === "fulfilled" ? chipRes.value : null;
   const analysis = buildAnalysis(json.rows, "linear", "3.5");
 
-  // 先查本地字典，無資料則帶入 API 返回名稱
-  const displayName = getStockName(json.symbol) || json.shortName || json.longName || json.name || "";
+  // 優先使用 OpenData/後端發送回來的中文名稱
+  const displayName = json.name || getStockName(json.symbol) || "";
 
   return { 
     sym: json.symbol, 
@@ -654,7 +601,7 @@ async function fetchLevelForWatchlist(symbol) {
 }
 
 // ------------------------------------------
-// 8. 觀察清單邏輯 (批量掃描 / 繪製卡片)
+// 8. 觀察清單邏輯
 // ------------------------------------------
 if (btnWatchlist) {
   btnWatchlist.addEventListener("click", async () => {
@@ -726,11 +673,10 @@ function updateWatchlistDisplay() {
   const sortMode = watchlistSort ? watchlistSort.value : "code";
 
   let resultList = scannedWatchlistCache.filter(item => {
-    // 取得靜態字典與動態名稱
     const dictName = getStockName(item.sym);
     const apiName = item.name || "";
     
-    // 同時搜尋：代號、字典名稱、API名稱
+    // 關鍵字搜尋：代號、字典名稱或 OpenData 下載的 API 名稱
     const matchSearch = item.sym.toLowerCase().includes(searchQuery) || 
                         dictName.toLowerCase().includes(searchQuery) ||
                         apiName.toLowerCase().includes(searchQuery);
@@ -745,6 +691,7 @@ function updateWatchlistDisplay() {
 
     return matchSearch && matchZone;
   });
+
   resultList.sort((a, b) => {
     if (sortMode === "code") {
       return a.sym.localeCompare(b.sym);
@@ -804,8 +751,8 @@ function updateWatchlistDisplay() {
     const nearest = getNearestLevel(item.last);
     const nearestHint = formatNearestText(nearest);
 
-    // 強制優先取用本地字典名稱，確保畫面一定會顯示中文名稱
-    const displayName = getStockName(item.sym) || item.name || "";
+    // 優先帶出從後端自動抓取的中文名稱
+    const displayName = item.name || getStockName(item.sym) || "";
 
     card.innerHTML = `
       <div>
@@ -872,7 +819,7 @@ if (fetchSymbolBtn) {
       csvInput.value = JSON.stringify(json.rows);
       
       if (chartTitle) {
-        chartTitle.textContent = formatSymbolDisplay(json.symbol);
+        chartTitle.textContent = formatSymbolDisplay(json.symbol, json.name);
       }
       
       if (btnAddToWatchlist) {
@@ -911,10 +858,10 @@ if (btnAddToWatchlist) {
       return;
     }
 
-	if (syms.length >= MAX_WATCHLIST_LIMIT) {
-	  alert(`⚠️ 觀察清單最多只能 ${MAX_WATCHLIST_LIMIT} 支股票！`);
-	  return;
-	}
+    if (syms.length >= MAX_WATCHLIST_LIMIT) {
+      alert(`⚠️ 觀察清單最多只能 ${MAX_WATCHLIST_LIMIT} 支股票！`);
+      return;
+    }
 
     syms.push(rawSym);
     watchlistInput.value = syms.join(", ");
@@ -954,10 +901,10 @@ if (btnAddWatchlistSingle) {
       return;
     }
     
-	if (syms.length >= MAX_WATCHLIST_LIMIT) {
-	  watchlistStatus.textContent = `⚠️ 監控清單最多只能 ${MAX_WATCHLIST_LIMIT} 支股票喔！`;
-	  return;
-	}
+    if (syms.length >= MAX_WATCHLIST_LIMIT) {
+      watchlistStatus.textContent = `⚠️ 監控清單最多只能 ${MAX_WATCHLIST_LIMIT} 支股票喔！`;
+      return;
+    }
     
     syms.push(newSym);
     watchlistInput.value = syms.join(", ");
@@ -1092,10 +1039,10 @@ if (btnImportWatchlist) {
     const mergedSet = new Set([...existingSyms, ...importedSyms]);
     const mergedList = Array.from(mergedSet);
 
-	if (mergedList.length > MAX_WATCHLIST_LIMIT) {
-	  alert(`⚠️ 合併後數量超過 ${MAX_WATCHLIST_LIMIT} 支上限，將自動截取保留前 ${MAX_WATCHLIST_LIMIT} 支股票。`);
-	  mergedList.length = MAX_WATCHLIST_LIMIT;
-	}
+    if (mergedList.length > MAX_WATCHLIST_LIMIT) {
+      alert(`⚠️ 合併後數量超過 ${MAX_WATCHLIST_LIMIT} 支上限，將自動截取保留前 ${MAX_WATCHLIST_LIMIT} 支股票。`);
+      mergedList.length = MAX_WATCHLIST_LIMIT;
+    }
 
     watchlistInput.value = mergedList.join(", ");
     localStorage.setItem("lohas_watchlist", watchlistInput.value);
