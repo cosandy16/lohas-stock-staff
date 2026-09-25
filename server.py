@@ -26,14 +26,14 @@ ssl_ctx.verify_mode = ssl.CERT_NONE
 STOCK_NAME_MAP = {}
 
 def update_stock_names_from_api():
-    """自動從證交所 (TWSE) 與櫃買中心 (TPEx) OpenData 下載最新股票/ETF名稱清單"""
+    """自動從證交所 (TWSE) 與櫃買中心 (TPEx) OpenData 下載最新股票/ETF 中文簡稱清單"""
     global STOCK_NAME_MAP
     new_map = {}
     
-    # 1. 證交所 (上市股票 & ETF)
+    # 1. 證交所 (上市股票 & 全部上市 ETF)
     twse_urls = [
-        "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL",
-        "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
+        "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL",  # 個股日本益比/殖利率資料 (含簡稱)
+        "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"         # 上市公司基本資料
     ]
     for twse_url in twse_urls:
         try:
@@ -41,26 +41,30 @@ def update_stock_names_from_api():
             with urllib.request.urlopen(req, timeout=8, context=ssl_ctx) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 for item in data:
-                    code = (item.get("Code") or item.get("公司代號") or "").strip()
-                    name = (item.get("Name") or item.get("公司名稱") or item.get("公司簡稱") or "").strip()
+                    code = (item.get("Code") or item.get("公司代號") or item.get("證券代號") or "").strip()
+                    name = (item.get("Name") or item.get("公司簡稱") or item.get("證券名稱") or "").strip()
                     if code and name:
                         new_map[code] = name
         except Exception as e:
             print(f"⚠️ [TWSE API] 嘗試下載上市清單失敗 ({twse_url}): {e}")
 
-    # 2. 櫃買中心 (上櫃股票 & ETF)
-    tpex_url = "https://www.tpex.org.tw/openapi/v1/mops_all_01"
-    try:
-        req = urllib.request.Request(tpex_url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=8, context=ssl_ctx) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            for item in data:
-                code = item.get("SecuritiesCompanyCode", "").strip()
-                name = item.get("CompanyName", "").strip() or item.get("CompanyAbbreviation", "").strip()
-                if code and name:
-                    new_map[code] = name
-    except Exception as e:
-        print(f"⚠️ [TPEx API] 下載上櫃清單失敗: {e}")
+    # 2. 櫃買中心 (上櫃股票 & 上櫃 ETF)
+    tpex_urls = [
+        "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes",  # 上櫃即時行情簡稱清單
+        "https://www.tpex.org.tw/openapi/v1/mops_all_01"              # 上櫃基本資料
+    ]
+    for tpex_url in tpex_urls:
+        try:
+            req = urllib.request.Request(tpex_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=8, context=ssl_ctx) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                for item in data:
+                    code = (item.get("SecuritiesCompanyCode") or item.get("SecuritiesCode") or item.get("代號") or "").strip()
+                    name = (item.get("CompanyAbbreviation") or item.get("CompanyName") or item.get("名稱") or "").strip()
+                    if code and name:
+                        new_map[code] = name
+        except Exception as e:
+            print(f"⚠️ [TPEx API] 下載上櫃清單失敗 ({tpex_url}): {e}")
 
     if new_map:
         STOCK_NAME_MAP = new_map
@@ -85,16 +89,16 @@ def parse_num_to_sheets(val):
     return int(round(n / 1000.0)) if abs(n) >= 500 else int(round(n))
 
 def clean_stock_name(raw_name):
-    """【中英文通用名稱清理】移除公司後綴贅字與過長字元"""
+    """【中英文通用名稱清理】移除公司後綴贅字，保留可識別關鍵字"""
     if not raw_name:
         return ""
     
     name = str(raw_name).strip()
 
     # 1. 中文名稱常見後綴清理
-    name = re.sub(r'(股份有限公司|有限公司|股份公司|企業|集團)$', '', name)
+    name = re.sub(r'(股份有限公司|有限公司|股份公司)$', '', name)
 
-    # 2. 英文名稱常見機構/法人後綴清理（不分大小寫）
+    # 2. 英文名稱機構/法人後綴清理（避免誤刪 YUANTA / ETF 名稱本體）
     name = re.sub(
         r'\b(SECURITIES|INVESTMENT|INVT|TRUST|TST|CORPORATION|CORP|LIMITED|LTD|HOLDINGS|INC|CO)\b',
         '',
@@ -106,9 +110,9 @@ def clean_stock_name(raw_name):
     name = re.sub(r'[-.,_]+', ' ', name)
     name = " ".join(name.split())
 
-    # 4. 長度限制（最多 8 個字，防範極端狀況破版）
-    if len(name) > 8:
-        name = name[:8]
+    # 4. 長度限制（放寬至最多 10 個字，避免 ETF 核心名稱遭截斷）
+    if len(name) > 10:
+        name = name[:10]
 
     return name
 
