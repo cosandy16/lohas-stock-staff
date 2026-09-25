@@ -1081,22 +1081,4 @@ function bindEvents() {
       alert(`✅ 清單併集合併成功！\n原清單: ${existingSyms.length} 支\n新增: ${addedCount > 0 ? addedCount : 0} 支\n合併後總計: ${mergedList.length} 支股票。\n\n請點擊「執行批量掃描更新」以載入最新數據。`);
     });
   }
-
-  // 模擬範例數據按鈕
-  const sampleBtn = document.querySelector("#sampleBtn");
-  if (sampleBtn) {
-    sampleBtn.addEventListener("click", () => {
-      const mock = []; 
-      let p = 100;
-      for(let i = 0; i < 300; i++) {
-        mock.push({ 
-          date: new Date(Date.now() - (300 - i) * 86400000).toISOString().split('T')[0], 
-          close: p += (Math.random() - 0.48) 
-        });
-      }
-      if (csvInput) csvInput.value = JSON.stringify(mock);
-      if (chartTitle) chartTitle.textContent = "模擬範例股票";
-      render();
-    });
-  }
 }
