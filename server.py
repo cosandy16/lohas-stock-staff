@@ -21,7 +21,7 @@ ssl_ctx.check_hostname = False
 ssl_ctx.verify_mode = ssl.CERT_NONE
 
 # ---------------------------------------------------------
-# 📚 全局股票/ETF 中文名稱快取字典 (啟動時自動向 API 下載)
+# 📚 全局股票/ETF 中文名稱快取字典
 # ---------------------------------------------------------
 STOCK_NAME_MAP = {}
 
@@ -32,9 +32,9 @@ def update_stock_names_from_api():
     
     # 1. 證交所 (上市股票 & 全體 ETF)
     twse_urls = [
-        "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL",       # 上市普通股 (個股日本益比/殖利率)
-        "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",    # 上市全個股 & ETF 最新成交彙總 (含 ETF 中文簡稱)
-        "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"               # 上市公司基本資料
+        "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL",
+        "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
+        "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
     ]
     for twse_url in twse_urls:
         try:
@@ -47,12 +47,12 @@ def update_stock_names_from_api():
                     if code and name:
                         new_map[code] = name
         except Exception as e:
-            print(f"⚠️ [TWSE API] 嘗試下載上市清單失敗 ({twse_url}): {e}")
+            print(f"⚠️ [TWSE API] 下載上市清單失敗 ({twse_url}): {e}")
 
-    # 2. 櫃買中心 (上櫃股票 & 上櫃 ETF / 債券 ETF)
+    # 2. 櫃買中心 (上櫃股票 & 上櫃 ETF)
     tpex_urls = [
-        "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes",      # 上櫃股票 & ETF 即時行情清單
-        "https://www.tpex.org.tw/openapi/v1/mops_all_01"                  # 上櫃基本資料
+        "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes",
+        "https://www.tpex.org.tw/openapi/v1/mops_all_01"
     ]
     for tpex_url in tpex_urls:
         try:
@@ -90,49 +90,27 @@ def parse_num_to_sheets(val):
     return int(round(n / 1000.0)) if abs(n) >= 500 else int(round(n))
 
 def clean_stock_name(raw_name):
-    """【中英文通用名稱清理】移除公司後綴贅字，保留可識別關鍵字"""
     if not raw_name:
         return ""
-    
     name = str(raw_name).strip()
-
-    # 1. 中文名稱常見後綴清理
     name = re.sub(r'(股份有限公司|有限公司|股份公司)$', '', name)
-
-    # 2. 英文名稱機構/法人後綴清理（避免誤刪 YUANTA / ETF 名稱本體）
-    name = re.sub(
-        r'\b(SECURITIES|INVESTMENT|INVT|TRUST|TST|CORPORATION|CORP|LIMITED|LTD|HOLDINGS|INC|CO)\b',
-        '',
-        name,
-        flags=re.IGNORECASE
-    )
-
-    # 3. 清除多餘符號與空白
+    name = re.sub(r'\b(SECURITIES|INVESTMENT|INVT|TRUST|TST|CORPORATION|CORP|LIMITED|LTD|HOLDINGS|INC|CO)\b', '', name, flags=re.IGNORECASE)
     name = re.sub(r'[-.,_]+', ' ', name)
     name = " ".join(name.split())
-
-    # 4. 長度限制（放寬至最多 10 個字，避免 ETF 核心名稱遭截斷）
     if len(name) > 10:
         name = name[:10]
-
     return name
 
 # ---------------------------------------------------------
-# 🌐 FinMind API (三大法人籌碼)
+# 🌐 三大法人籌碼多重備援抓取 (FinMind -> TWSE 上市 -> TPEx 上櫃)
 # ---------------------------------------------------------
 def fetch_finmind_chip(symbol_code):
+    """1. 首選：FinMind API (包含買賣明細)"""
     today = datetime.date.today()
     start_date = (today - datetime.timedelta(days=15)).strftime("%Y-%m-%d")
     url = f"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInstitutionalInvestorsBuySell&data_id={symbol_code}&start_date={start_date}"
 
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            "Accept": "application/json",
-        },
-    )
-
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=8, context=ssl_ctx) as resp:
             res_data = json.loads(resp.read().decode("utf-8"))
@@ -190,14 +168,13 @@ def fetch_finmind_chip(symbol_code):
             "total": f_diff + t_diff + d_diff,
         }
     except Exception as e:
-        print(f"⚠️ FinMind API 擷取失敗 ({symbol_code}): {e}")
+        print(f"⚠️ FinMind API 跳過 ({symbol_code}): {e}")
     return None
 
 def fetch_twse_openapi(symbol_code):
+    """2. 上市備援：證交所 OpenData"""
     url = "https://openapi.twse.com.tw/v1/fund/T86Daily"
-    req = urllib.request.Request(
-        url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
-    )
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=5, context=ssl_ctx) as resp:
             data = json.loads(resp.read().decode("utf-8"))
@@ -230,15 +207,46 @@ def fetch_twse_openapi(symbol_code):
         print(f"💡 TWSE OpenData 跳過: {e}")
     return None
 
+def fetch_tpex_openapi(symbol_code):
+    """3. 上櫃備援：櫃買中心 OpenData (修復 4303.TWO 等上櫃籌碼問題)"""
+    url = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_quotes"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=5, context=ssl_ctx) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            for item in data:
+                code = str(item.get("SecuritiesCompanyCode", "") or item.get("SecuritiesCode", "")).strip()
+                if code == symbol_code:
+                    foreign = parse_num_to_sheets(item.get("ForeignInvestorsBuySell", 0))
+                    trust = parse_num_to_sheets(item.get("InvestmentTrustBuySell", 0))
+                    dealer = parse_num_to_sheets(item.get("DealerBuySell", 0))
+                    total = foreign + trust + dealer
+
+                    return {
+                        "date": datetime.date.today().strftime("%Y-%m-%d"),
+                        "foreign": foreign, "foreign_buy": 0, "foreign_sell": 0,
+                        "trust": trust, "trust_buy": 0, "trust_sell": 0,
+                        "dealer": dealer, "dealer_buy": 0, "dealer_sell": 0,
+                        "total": total,
+                    }
+    except Exception as e:
+        print(f"💡 TPEx OpenData 跳過: {e}")
+    return None
+
 def fetch_chip_data(raw_symbol):
+    """乾淨切割代號 (如從 4303.TWO 切出 4303)，並依序查詢備援來源"""
     symbol_code = raw_symbol.split(".")[0].strip().upper()
-    print(f"📡 正在查詢 [{symbol_code}] 最新三大法人盤後籌碼...")
+    print(f"📡 正在查詢 [{symbol_code}] 最新三大法人籌碼...")
 
     res = fetch_finmind_chip(symbol_code)
     if res:
         return res
 
     res = fetch_twse_openapi(symbol_code)
+    if res:
+        return res
+
+    res = fetch_tpex_openapi(symbol_code)
     if res:
         return res
 
@@ -329,7 +337,6 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             if not rows:
                 raise ValueError("解析後無有效收盤價歷史紀錄")
 
-            # 優先使用 OpenData 中文名稱；若無則降級取 Yahoo Finance 名稱，再統一進行清理
             clean_code = yahoo_symbol.split(".")[0].strip()
             raw_stock_name = STOCK_NAME_MAP.get(clean_code)
             
@@ -361,12 +368,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
 
-        # 0. 取得完整股票名稱字典 API
         if parsed.path == "/api/names":
             self.send_json(200, STOCK_NAME_MAP)
             return
 
-        # 1. 股價 API (自動回傳已清理過的 stock_name)
         if parsed.path == "/api/yahoo":
             query = urllib.parse.parse_qs(parsed.query)
             raw_symbol = query.get("symbol", [""])[0]
@@ -389,7 +394,6 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(400, {"error": str(exc)})
             return
 
-        # 2. 三大法人籌碼 API
         if parsed.path == "/api/chip":
             query = urllib.parse.parse_qs(parsed.query)
             raw_symbol = query.get("symbol", [""])[0]
@@ -400,7 +404,6 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {"error": "尚未發布盤後籌碼或非台股標的"})
             return
 
-        # 3. 靜態檔案處理
         target = parsed.path.lstrip("/") or "index.html"
         file_path = (ROOT / target).resolve()
         if not str(file_path).startswith(str(ROOT)) or not file_path.is_file():
@@ -420,9 +423,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    # 服務啟動時自動下載最新的證交所/櫃買中心股票對照清單
     update_stock_names_from_api()
-
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"🚀 Render Cloud Stock Server Started on Port {PORT}")
     try:
