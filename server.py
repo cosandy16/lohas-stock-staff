@@ -26,14 +26,15 @@ ssl_ctx.verify_mode = ssl.CERT_NONE
 STOCK_NAME_MAP = {}
 
 def update_stock_names_from_api():
-    """自動從證交所 (TWSE) 與櫃買中心 (TPEx) OpenData 下載最新股票/ETF 中文簡稱清單"""
+    """自動從證交所 (TWSE) 與櫃買中心 (TPEx) OpenData 下載最新股票 & ETF 中文簡稱清單"""
     global STOCK_NAME_MAP
     new_map = {}
     
-    # 1. 證交所 (上市股票 & 全部上市 ETF)
+    # 1. 證交所 (上市股票 & 全體 ETF)
     twse_urls = [
-        "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL",  # 個股日本益比/殖利率資料 (含簡稱)
-        "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"         # 上市公司基本資料
+        "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL",       # 上市普通股 (個股日本益比/殖利率)
+        "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",    # 上市全個股 & ETF 最新成交彙總 (含 ETF 中文簡稱)
+        "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"               # 上市公司基本資料
     ]
     for twse_url in twse_urls:
         try:
@@ -41,17 +42,17 @@ def update_stock_names_from_api():
             with urllib.request.urlopen(req, timeout=8, context=ssl_ctx) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 for item in data:
-                    code = (item.get("Code") or item.get("公司代號") or item.get("證券代號") or "").strip()
-                    name = (item.get("Name") or item.get("公司簡稱") or item.get("證券名稱") or "").strip()
+                    code = (item.get("Code") or item.get("SecuritiesCode") or item.get("公司代號") or item.get("證券代號") or "").strip()
+                    name = (item.get("Name") or item.get("SecuritiesName") or item.get("公司簡稱") or item.get("證券名稱") or "").strip()
                     if code and name:
                         new_map[code] = name
         except Exception as e:
             print(f"⚠️ [TWSE API] 嘗試下載上市清單失敗 ({twse_url}): {e}")
 
-    # 2. 櫃買中心 (上櫃股票 & 上櫃 ETF)
+    # 2. 櫃買中心 (上櫃股票 & 上櫃 ETF / 債券 ETF)
     tpex_urls = [
-        "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes",  # 上櫃即時行情簡稱清單
-        "https://www.tpex.org.tw/openapi/v1/mops_all_01"              # 上櫃基本資料
+        "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes",      # 上櫃股票 & ETF 即時行情清單
+        "https://www.tpex.org.tw/openapi/v1/mops_all_01"                  # 上櫃基本資料
     ]
     for tpex_url in tpex_urls:
         try:
@@ -68,7 +69,7 @@ def update_stock_names_from_api():
 
     if new_map:
         STOCK_NAME_MAP = new_map
-        print(f"🎉 全局股票名稱字典更新完成，總計 {len(STOCK_NAME_MAP)} 檔標的名稱")
+        print(f"🎉 全局股票名稱字典更新完成，總計 {len(STOCK_NAME_MAP)} 檔標的名稱 (含 ETF)")
 
 # ---------------------------------------------------------
 # 工具函式
