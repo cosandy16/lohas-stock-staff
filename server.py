@@ -84,29 +84,39 @@ def parse_num_to_sheets(val):
         return 0
     return int(round(n / 1000.0)) if abs(n) >= 500 else int(round(n))
 
-def clean_yahoo_name(raw_name):
-    """【方法一】將 Yahoo Finance 的長英文公司名稱清理為簡短名稱"""
+def clean_stock_name(raw_name):
+    """【中英文通用名稱清理】移除公司後綴贅字與過長字元"""
     if not raw_name:
         return ""
     
-    # 移除常見的機構/公司後綴關鍵字
-    remove_words = {
-        "SECURITIES", "INVT", "INVESTMENT", "TST", "TRUST", "CO", "LTD", 
-        "LIMITED", "CORP", "CORPORATION", "INC", "INCORPORATED", "HOLDINGS"
-    }
-    
-    # 清理非英文字母與空格的特殊符號
-    words = raw_name.replace(".", " ").replace("-", " ").split()
-    clean_words = [w for w in words if w.upper() not in remove_words]
-    
-    return " ".join(clean_words) if clean_words else raw_name
+    name = str(raw_name).strip()
+
+    # 1. 中文名稱常見後綴清理
+    name = re.sub(r'(股份有限公司|有限公司|股份公司|企業|集團)$', '', name)
+
+    # 2. 英文名稱常見機構/法人後綴清理（不分大小寫）
+    name = re.sub(
+        r'\b(SECURITIES|INVESTMENT|INVT|TRUST|TST|CORPORATION|CORP|LIMITED|LTD|HOLDINGS|INC|CO)\b',
+        '',
+        name,
+        flags=re.IGNORECASE
+    )
+
+    # 3. 清除多餘符號與空白
+    name = re.sub(r'[-.,_]+', ' ', name)
+    name = " ".join(name.split())
+
+    # 4. 長度限制（最多 8 個字，防範極端狀況破版）
+    if len(name) > 8:
+        name = name[:8]
+
+    return name
 
 # ---------------------------------------------------------
 # 🌐 FinMind API (三大法人籌碼)
 # ---------------------------------------------------------
 def fetch_finmind_chip(symbol_code):
     today = datetime.date.today()
-    # 延伸至 15 天以應付春節連假
     start_date = (today - datetime.timedelta(days=15)).strftime("%Y-%m-%d")
     url = f"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInstitutionalInvestorsBuySell&data_id={symbol_code}&start_date={start_date}"
 
@@ -314,13 +324,14 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             if not rows:
                 raise ValueError("解析後無有效收盤價歷史紀錄")
 
-            # 取得該代號對應的中文名稱；若無則自動清理 Yahoo 回傳的冗長英文名稱
+            # 優先使用 OpenData 中文名稱；若無則降級取 Yahoo Finance 名稱，再統一進行清理
             clean_code = yahoo_symbol.split(".")[0].strip()
-            stock_name = STOCK_NAME_MAP.get(clean_code)
+            raw_stock_name = STOCK_NAME_MAP.get(clean_code)
             
-            if not stock_name:
-                raw_yahoo_name = meta.get("shortName") or meta.get("longName") or ""
-                stock_name = clean_yahoo_name(raw_yahoo_name)
+            if not raw_stock_name:
+                raw_stock_name = meta.get("shortName") or meta.get("longName") or clean_code
+
+            stock_name = clean_stock_name(raw_stock_name)
 
             return yahoo_symbol, rows, stock_name
 
@@ -350,7 +361,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, STOCK_NAME_MAP)
             return
 
-        # 1. 股價 API (自動回傳從 OpenData 查到的 stock_name)
+        # 1. 股價 API (自動回傳已清理過的 stock_name)
         if parsed.path == "/api/yahoo":
             query = urllib.parse.parse_qs(parsed.query)
             raw_symbol = query.get("symbol", [""])[0]
