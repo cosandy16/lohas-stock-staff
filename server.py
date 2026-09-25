@@ -21,12 +21,12 @@ ssl_ctx.check_hostname = False
 ssl_ctx.verify_mode = ssl.CERT_NONE
 
 # ---------------------------------------------------------
-# 📚 全局股票/ETF 中文名稱快取字典
+# 📚 全局股票/ETF 中文名稱快取字典 (自動補全上市與上櫃)
 # ---------------------------------------------------------
 STOCK_NAME_MAP = {}
 
 def update_stock_names_from_api():
-    """自動從證交所 (TWSE) 與櫃買中心 (TPEx) OpenData 下載最新股票 & ETF 中文簡稱清單"""
+    """自動從證交所 (TWSE) 與櫃買中心 (TPEx) OpenData 下載最新完整股票 & ETF 中文簡稱清單"""
     global STOCK_NAME_MAP
     new_map = {}
     
@@ -49,10 +49,11 @@ def update_stock_names_from_api():
         except Exception as e:
             print(f"⚠️ [TWSE API] 下載上市清單失敗 ({twse_url}): {e}")
 
-    # 2. 櫃買中心 (上櫃股票 & 上櫃 ETF)
+    # 2. 櫃買中心 (上櫃股票 & 上櫃 ETF / 債券 ETF) - 完整相容各式 API key 結構
     tpex_urls = [
         "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes",
-        "https://www.tpex.org.tw/openapi/v1/mops_all_01"
+        "https://www.tpex.org.tw/openapi/v1/mops_all_01",
+        "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_quotes"
     ]
     for tpex_url in tpex_urls:
         try:
@@ -60,8 +61,8 @@ def update_stock_names_from_api():
             with urllib.request.urlopen(req, timeout=8, context=ssl_ctx) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 for item in data:
-                    code = (item.get("SecuritiesCompanyCode") or item.get("SecuritiesCode") or item.get("代號") or "").strip()
-                    name = (item.get("CompanyAbbreviation") or item.get("CompanyName") or item.get("名稱") or "").strip()
+                    code = (item.get("SecuritiesCompanyCode") or item.get("SecuritiesCode") or item.get("CompanyCode") or item.get("代號") or item.get("股票代號") or "").strip()
+                    name = (item.get("CompanyName") or item.get("CompanyAbbreviation") or item.get("SecuritiesName") or item.get("名稱") or item.get("股票名稱") or "").strip()
                     if code and name:
                         new_map[code] = name
         except Exception as e:
@@ -69,7 +70,21 @@ def update_stock_names_from_api():
 
     if new_map:
         STOCK_NAME_MAP = new_map
-        print(f"🎉 全局股票名稱字典更新完成，總計 {len(STOCK_NAME_MAP)} 檔標的名稱 (含 ETF)")
+        print(f"🎉 全局股票名稱字典更新完成，總計 {len(STOCK_NAME_MAP)} 檔標的名稱 (含上市/上櫃/ETF)")
+
+def fetch_single_tpex_name(symbol_code):
+    """備援：若字典漏掉，即時發送 request 向櫃買中心查詢單檔上櫃股票中文名"""
+    try:
+        url = f"https://www.tpex.org.tw/web/stock/aftertrading/otc_quotes_summary1/stk_summary_result.php?l=zh-tw&stkno={symbol_code}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=4, context=ssl_ctx) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            aa_data = data.get("aaData", [])
+            if aa_data and len(aa_data[0]) > 1:
+                return aa_data[0][1].strip()
+    except Exception:
+        pass
+    return None
 
 # ---------------------------------------------------------
 # 工具函式
@@ -102,10 +117,9 @@ def clean_stock_name(raw_name):
     return name
 
 # ---------------------------------------------------------
-# 🌐 三大法人籌碼多重備援抓取 (FinMind -> TWSE 上市 -> TPEx 上櫃)
+# 🌐 三大法人籌碼多重備援抓取
 # ---------------------------------------------------------
 def fetch_finmind_chip(symbol_code):
-    """1. 首選：FinMind API (包含買賣明細)"""
     today = datetime.date.today()
     start_date = (today - datetime.timedelta(days=15)).strftime("%Y-%m-%d")
     url = f"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInstitutionalInvestorsBuySell&data_id={symbol_code}&start_date={start_date}"
@@ -172,7 +186,6 @@ def fetch_finmind_chip(symbol_code):
     return None
 
 def fetch_twse_openapi(symbol_code):
-    """2. 上市備援：證交所 OpenData"""
     url = "https://openapi.twse.com.tw/v1/fund/T86Daily"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
     try:
@@ -208,7 +221,6 @@ def fetch_twse_openapi(symbol_code):
     return None
 
 def fetch_tpex_openapi(symbol_code):
-    """3. 上櫃備援：櫃買中心 OpenData (修復 4303.TWO 等上櫃籌碼問題)"""
     url = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_quotes"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
     try:
@@ -234,7 +246,6 @@ def fetch_tpex_openapi(symbol_code):
     return None
 
 def fetch_chip_data(raw_symbol):
-    """乾淨切割代號 (如從 4303.TWO 切出 4303)，並依序查詢備援來源"""
     symbol_code = raw_symbol.split(".")[0].strip().upper()
     print(f"📡 正在查詢 [{symbol_code}] 最新三大法人籌碼...")
 
@@ -337,9 +348,17 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             if not rows:
                 raise ValueError("解析後無有效收盤價歷史紀錄")
 
+            # 優先使用 OpenData 全局中文名稱字典
             clean_code = yahoo_symbol.split(".")[0].strip()
             raw_stock_name = STOCK_NAME_MAP.get(clean_code)
             
+            # 若字典仍查無，對上櫃股票 (.TWO) 發動動態備援查詢
+            if not raw_stock_name and ".TWO" in yahoo_symbol:
+                raw_stock_name = fetch_single_tpex_name(clean_code)
+                if raw_stock_name:
+                    STOCK_NAME_MAP[clean_code] = raw_stock_name
+
+            # 最後防線才使用 Yahoo 回傳名稱
             if not raw_stock_name:
                 raw_stock_name = meta.get("shortName") or meta.get("longName") or clean_code
 
