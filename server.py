@@ -38,7 +38,7 @@ def update_stock_names_from_api():
     ]
     for twse_url in twse_urls:
         try:
-            req = urllib.request.Request(twse_url, headers={"User-Agent": "Mozilla/5.0"})
+            req = urllib.request.Request(twse_url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
             with urllib.request.urlopen(req, timeout=8, context=ssl_ctx) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 for item in data:
@@ -49,7 +49,7 @@ def update_stock_names_from_api():
         except Exception as e:
             print(f"⚠️ [TWSE API] 下載上市清單失敗 ({twse_url}): {e}")
 
-    # 2. 櫃買中心 (上櫃股票 & 上櫃 ETF / 債券 ETF) - 完整相容各式 API key 結構
+    # 2. 櫃買中心 (上櫃股票 & 上櫃 ETF / 債券 ETF)
     tpex_urls = [
         "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes",
         "https://www.tpex.org.tw/openapi/v1/mops_all_01",
@@ -57,7 +57,7 @@ def update_stock_names_from_api():
     ]
     for tpex_url in tpex_urls:
         try:
-            req = urllib.request.Request(tpex_url, headers={"User-Agent": "Mozilla/5.0"})
+            req = urllib.request.Request(tpex_url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
             with urllib.request.urlopen(req, timeout=8, context=ssl_ctx) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 for item in data:
@@ -76,7 +76,7 @@ def fetch_single_tpex_name(symbol_code):
     """備援：若字典漏掉，即時發送 request 向櫃買中心查詢單檔上櫃股票中文名"""
     try:
         url = f"https://www.tpex.org.tw/web/stock/aftertrading/otc_quotes_summary1/stk_summary_result.php?l=zh-tw&stkno={symbol_code}"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
         with urllib.request.urlopen(req, timeout=4, context=ssl_ctx) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             aa_data = data.get("aaData", [])
@@ -124,7 +124,7 @@ def fetch_finmind_chip(symbol_code):
     start_date = (today - datetime.timedelta(days=15)).strftime("%Y-%m-%d")
     url = f"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInstitutionalInvestorsBuySell&data_id={symbol_code}&start_date={start_date}"
 
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", "Accept": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=8, context=ssl_ctx) as resp:
             res_data = json.loads(resp.read().decode("utf-8"))
@@ -187,7 +187,7 @@ def fetch_finmind_chip(symbol_code):
 
 def fetch_twse_openapi(symbol_code):
     url = "https://openapi.twse.com.tw/v1/fund/T86Daily"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", "Accept": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=5, context=ssl_ctx) as resp:
             data = json.loads(resp.read().decode("utf-8"))
@@ -222,7 +222,7 @@ def fetch_twse_openapi(symbol_code):
 
 def fetch_tpex_openapi(symbol_code):
     url = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_quotes"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", "Accept": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=5, context=ssl_ctx) as resp:
             data = json.loads(resp.read().decode("utf-8"))

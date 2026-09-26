@@ -606,8 +606,8 @@ function render() {
       yieldText.textContent = `${((fun.dividend / last.close) * 100).toFixed(2)} %`;
     }
 
-	// 💡【觸發建議更新】：傳入位階、R2 與完整的籌碼物件供建議面板精細評估
-	updateAdvicePanel(zoneStr, last.r2, currentMainChipData);
+    // 💡 觸發建議更新：傳入位階、R2 與籌碼物件供建議面板評估
+    updateAdvicePanel(zoneStr, last.r2, currentMainChipData);
 
     renderChart(analysis);
     if (levelsTable) {
@@ -633,7 +633,7 @@ async function loadMainChipData(symbol) {
     const chip = await res.json();
     if (!chip || chip.error) {
       chipEl.innerHTML = `<span style="color:var(--muted); font-size:0.85em;">尚無今日盤後籌碼資料或非台股標的</span>`;
-      render(); // 即時無籌碼也觸發渲染更新建議
+      render();
       return;
     }
 
@@ -665,7 +665,6 @@ async function loadMainChipData(symbol) {
       合計 ${fmtDiff(chip.total)} 張
     `;
 
-    // 💡 籌碼載入完成後再次驅動 render 更新投資建議
     render();
   } catch (e) {
     chipEl.innerHTML = `<span style="color:var(--muted); font-size:0.85em;">籌碼讀取失敗</span>`;
@@ -707,7 +706,6 @@ async function fetchLevelForWatchlist(symbol) {
 // ------------------------------------------
 // 9. 觀察清單邏輯
 // ------------------------------------------
-// 分批執行異步請求，防止觸發 Rate Limit
 async function fetchInBatches(symbols, batchSize = 5) {
   const results = [];
   for (let i = 0; i < symbols.length; i += batchSize) {
@@ -942,7 +940,6 @@ function bindEvents() {
           btnAddToWatchlist.style.display = "inline-block";
         }
 
-        // 先讀取籌碼資料，完成後內部會自動觸發 render() 與建議更新
         loadMainChipData(inputVal);
 
         if (fetchStatus) fetchStatus.textContent = "成功";
