@@ -267,6 +267,42 @@ function priceZone(p) {
   return "悲觀區下緣";
 }
 
+// 💡 新增：判斷極簡操作膠囊標籤 (🟢 加碼/佈局, 🟡 觀望/定額, 🔴 減碼/停利)
+function getActionBadge(zoneStr, chipData, r2Value) {
+  const r2 = parseFloat(r2Value) || 1;
+  const totalChip = (chipData && !chipData.error) ? (chipData.total || 0) : 0;
+
+  // 1. 若 R² 過低，歸類為觀望/定額
+  if (r2 < 0.4) {
+    return {
+      text: "🟡 觀望 / 定額",
+      style: "background-color: #fef3c7; color: #d97706; border: 1px solid #fcd34d;"
+    };
+  }
+
+  // 🔴 減碼 / 停利：高位階 (樂觀區) + 法人賣超
+  if ((zoneStr.includes("樂觀") || zoneStr === "中線以上") && totalChip < 0) {
+    return {
+      text: "🔴 減碼 / 停利",
+      style: "background-color: #fee2e2; color: #dc2626; border: 1px solid #fca5a5;"
+    };
+  }
+
+  // 🟢 加碼 / 佈局：低位階 (悲觀區) + 法人買超
+  if ((zoneStr.includes("悲觀") || zoneStr === "中線以下") && totalChip > 0) {
+    return {
+      text: "🟢 加碼 / 佈局",
+      style: "background-color: #d1fae5; color: #059669; border: 1px solid #6ee7b7;"
+    };
+  }
+
+  // 🟡 觀望 / 定額：其他常態情況
+  return {
+    text: "🟡 觀望 / 定額",
+    style: "background-color: #fef3c7; color: #d97706; border: 1px solid #fcd34d;"
+  };
+}
+
 function getPriceRangeDesc(p) {
   if (!p) return "";
   const f = formatPrice; 
@@ -752,7 +788,7 @@ function updateWatchlistDisplay() {
     } else if (sortMode === "rankAsc") {
       return getZoneWeight(priceZone(a.last)) - getZoneWeight(priceZone(b.last));
     } else if (sortMode === "rankDesc") {
-      return getZoneWeight(priceZone(b.last)) - getZoneWeight(priceZone(a.last));
+      return getZoneWeight(priceZone(a.last)) - getZoneWeight(priceZone(b.last));
     } else if (sortMode === "nearAsc") {
       return getNearestDistance(a.last) - getNearestDistance(b.last);
     } else if (sortMode === "nearDesc") {
@@ -807,6 +843,9 @@ function updateWatchlistDisplay() {
 
     const displayName = item.name || getStockName(item.sym) || "";
 
+    // 💡 取得操作膠囊標籤 Badge
+    const badge = getActionBadge(priceZone(item.last), item.chip, item.last.r2);
+
     card.innerHTML = `
       <div>
         <strong>${item.sym}</strong>${displayName ? `<span style="color:#555; font-size:0.85em; margin-left:6px; font-weight:600;">${displayName}</span>` : ""}<br>
@@ -821,8 +860,14 @@ function updateWatchlistDisplay() {
         </small>
       </div>
       <div style="text-align:right;">
-        <span style="font-weight:900; color:${zoneColor}">${priceZone(item.last)}</span>
-        <br>
+        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-bottom: 2px;">
+          <!-- 新增的操作膠囊標籤 -->
+          <span style="font-size: 0.72rem; font-weight: bold; padding: 2px 8px; border-radius: 12px; ${badge.style}">
+            ${badge.text}
+          </span>
+          <!-- 原有的位階文字 -->
+          <span style="font-weight:900; color:${zoneColor}">${priceZone(item.last)}</span>
+        </div>
         <small style="color:${smallTextColor}">區間: ${getPriceRangeDesc(item.last)}</small>
         <br>
         <small style="color:var(--blue); font-weight:bold; font-size: 0.78rem;">📌 ${nearestHint}</small>
