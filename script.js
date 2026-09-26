@@ -4,6 +4,9 @@
 
 const MAX_WATCHLIST_LIMIT = 40;
 
+// 全域暫存當前標的籌碼資料，供投資建議面板計算使用
+let currentMainChipData = null;
+
 // 1. 動態字典：初始化時自動從後端 API 下載全台股/ETF名稱
 let TW_STOCK_NAMES = {};
 
@@ -106,7 +109,56 @@ function initDOMElements() {
 }
 
 // ------------------------------------------
-// 3. 通用工具與計算函式
+// 🤖 3. 量化自動投資建議計算面板
+// ------------------------------------------
+function updateAdvicePanel(zoneName, r2Value, chipTotal) {
+  const container = document.getElementById("adviceContainer");
+  const titleEl = document.getElementById("adviceTitle");
+  const descEl = document.getElementById("adviceDesc");
+
+  if (!container || !titleEl || !descEl) return;
+
+  const r2 = parseFloat(r2Value) || 0;
+  const chip = parseInt(chipTotal) || 0;
+
+  // 1. 若 R² 過低 (擬合度不足)
+  if (r2 < 0.4) {
+    container.className = "advice-card advice-warning";
+    titleEl.innerHTML = "⚠️ 觀望警訊：五線譜擬合度不足 (R² < 0.4)";
+    descEl.textContent = `當前 R² 僅 ${r2.toFixed(3)}，代表股價走勢較不遵循常態均值回歸規律，建議結合基本面或技術面線型輔助判斷。`;
+    return;
+  }
+
+  // 2. 判斷位階屬性 (包含「樂觀區上緣」、「樂觀區」、「相對樂觀區」、「相對悲觀區」、「悲觀區下緣」等)
+  const isExpensive = zoneName.includes("樂觀");
+  const isCheap = zoneName.includes("悲觀");
+  const isChipBuying = chip > 0;
+
+  if (isExpensive) {
+    container.className = "advice-card advice-sell";
+    titleEl.innerHTML = "⚠️ 高位警訊：樂觀區宜分批停利 / 謹慎追高";
+    descEl.textContent = `股價已來到【${zoneName}】，進入統計常態的偏高區間。加上法人籌碼方向（合計 ${chip >= 0 ? "+" : ""}${chip} 張），修正拉回風險較大，建議持股者調升停利點或分批停利，未持股者不宜追高。`;
+  } 
+  else if (isCheap) {
+    if (isChipBuying) {
+      container.className = "advice-card advice-strong-buy";
+      titleEl.innerHTML = "🎯 強力觀察：低位階 + 法人買超加持";
+      descEl.textContent = `股價位於【${zoneName}】，且三大法人進場加碼（+${chip.toLocaleString()} 張）。低位階配合法人籌碼支撐，具備較高的勝率與潛在報酬比，可波段分批佈局。`;
+    } else {
+      container.className = "advice-card advice-buy";
+      titleEl.innerHTML = "🛒 價值浮現：位階偏低，可定期定額/分批買進";
+      descEl.textContent = `股價已進入【${zoneName}】，中長期投資價值顯現。惟法人籌碼尚未全面偏多 (${chip.toLocaleString()} 張)，建議採取定期定額或網格分批建立部位。`;
+    }
+  } 
+  else {
+    container.className = "advice-card advice-neutral";
+    titleEl.innerHTML = "⚖️ 區間盤整：常態軌道內合理波動";
+    descEl.textContent = `當前股價位於【${zoneName}】，處於正常統計軌道間。適合持續定期定額扣款，或靜待股價回落至悲觀區再考慮擴大波段佈局。`;
+  }
+}
+
+// ------------------------------------------
+// 4. 通用工具與計算函式
 // ------------------------------------------
 function getFundamentals(symbol, currentPrice) {
   if (!symbol) return { eps: 10, dividend: 4 };
@@ -212,7 +264,7 @@ function formatPrice(v) {
 }
 
 // ------------------------------------------
-// 4. 初始化與快取管理
+// 5. 初始化與快取管理
 // ------------------------------------------
 document.addEventListener("DOMContentLoaded", async () => {
   initDOMElements();
@@ -294,7 +346,7 @@ function updateRemoveSelect() {
 }
 
 // ------------------------------------------
-// 5. 迴歸分析與通道計算
+// 6. 迴歸分析與通道計算
 // ------------------------------------------
 function regression(values) {
   const n = values.length;
@@ -351,7 +403,7 @@ function buildAnalysis(data, currentMode = (modelMode ? modelMode.value : "linea
 }
 
 // ------------------------------------------
-// 6. 圖表渲染
+// 7. 圖表渲染
 // ------------------------------------------
 function renderChart(analysis) {
   if (!chart) return;
@@ -497,8 +549,9 @@ function render() {
     const analysis = buildAnalysis(data);
     const last = analysis[analysis.length - 1];
     
+    const zoneStr = priceZone(last);
     if (zoneText) {
-      zoneText.textContent = priceZone(last);
+      zoneText.textContent = zoneStr;
       zoneText.style.color = (last.close >= last.plus2) ? "#c94b4b" : (last.close <= last.minus2 ? "#12614a" : "var(--ink)");
       
       const nearest = getNearestLevel(last);
@@ -522,6 +575,10 @@ function render() {
       yieldText.textContent = `${((fun.dividend / last.close) * 100).toFixed(2)} %`;
     }
 
+    // 💡【觸發建議更新】：利用計算完的位階、R2 與全域籌碼張數進行自動建議評估
+    const totalChip = currentMainChipData ? (currentMainChipData.total || 0) : 0;
+    updateAdvicePanel(zoneStr, last.r2, totalChip);
+
     renderChart(analysis);
     if (levelsTable) {
       levelsTable.innerHTML = levelDefs.map(l => `<tr><td>${l.label}</td><td>${formatPrice(last[l.key])}</td><td>${priceZone(last) === l.label ? "●" : ""}</td></tr>`).join("");
@@ -532,21 +589,25 @@ function render() {
 }
 
 // ------------------------------------------
-// 7. API 資料抓取 (Chip & Yahoo)
+// 8. API 資料抓取 (Chip & Yahoo)
 // ------------------------------------------
 async function loadMainChipData(symbol) {
   const chipEl = document.querySelector("#chipText");
   if (!chipEl) return;
 
   chipEl.innerHTML = `<span style="color:var(--muted); font-size:0.85em;">🔍 正在讀取三大法人籌碼...</span>`;
+  currentMainChipData = null;
 
   try {
     const res = await fetch(`/api/chip?symbol=${encodeURIComponent(symbol)}`);
     const chip = await res.json();
     if (!chip || chip.error) {
       chipEl.innerHTML = `<span style="color:var(--muted); font-size:0.85em;">尚無今日盤後籌碼資料或非台股標的</span>`;
+      render(); // 即時無籌碼也觸發渲染更新建議
       return;
     }
+
+    currentMainChipData = chip;
 
     const fmtDiff = (num) => {
       const color = num > 0 ? "#c94b4b" : (num < 0 ? "#1f8a63" : "inherit");
@@ -573,8 +634,12 @@ async function loadMainChipData(symbol) {
       <span class="chip-item">自營 ${fmtDiff(chip.dealer)} 張${dealerTip}</span> | 
       合計 ${fmtDiff(chip.total)} 張
     `;
+
+    // 💡 籌碼載入完成後再次驅動 render 更新投資建議
+    render();
   } catch (e) {
     chipEl.innerHTML = `<span style="color:var(--muted); font-size:0.85em;">籌碼讀取失敗</span>`;
+    render();
   }
 }
 
@@ -610,7 +675,7 @@ async function fetchLevelForWatchlist(symbol) {
 }
 
 // ------------------------------------------
-// 8. 觀察清單邏輯
+// 9. 觀察清單邏輯
 // ------------------------------------------
 // 分批執行異步請求，防止觸發 Rate Limit
 async function fetchInBatches(symbols, batchSize = 5) {
@@ -847,8 +912,8 @@ function bindEvents() {
           btnAddToWatchlist.style.display = "inline-block";
         }
 
+        // 先讀取籌碼資料，完成後內部會自動觸發 render() 與建議更新
         loadMainChipData(inputVal);
-        render();
 
         if (fetchStatus) fetchStatus.textContent = "成功";
         localStorage.setItem("lohas_last_symbol", inputVal);
