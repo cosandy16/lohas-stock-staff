@@ -782,13 +782,15 @@ function updateWatchlistDisplay() {
     return matchSearch && matchZone;
   });
 
-  resultList.sort((a, b) => {
+	resultList.sort((a, b) => {
     if (sortMode === "code") {
       return a.sym.localeCompare(b.sym);
     } else if (sortMode === "rankAsc") {
+      // 🟢 低到高：分數小的排前面 (a - b)
       return getZoneWeight(priceZone(a.last)) - getZoneWeight(priceZone(b.last));
     } else if (sortMode === "rankDesc") {
-      return getZoneWeight(priceZone(a.last)) - getZoneWeight(priceZone(b.last));
+      // 🔴 高到低：分數大的排前面 (b - a)  <-- 改這裡！
+      return getZoneWeight(priceZone(b.last)) - getZoneWeight(priceZone(a.last));
     } else if (sortMode === "nearAsc") {
       return getNearestDistance(a.last) - getNearestDistance(b.last);
     } else if (sortMode === "nearDesc") {
