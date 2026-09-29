@@ -109,7 +109,7 @@ function initDOMElements() {
 }
 
 // ------------------------------------------
-// 🤖 3. 量化自動投資建議計算面板 (整合籌碼動向)
+// 🤖 3. 量化自動投資建議計算面板
 // ------------------------------------------
 function updateAdvicePanel(zoneName, r2Value, chipData) {
   const container = document.getElementById("adviceContainer");
@@ -119,13 +119,10 @@ function updateAdvicePanel(zoneName, r2Value, chipData) {
   if (!container || !titleEl || !descEl) return;
 
   const r2 = parseFloat(r2Value) || 0;
-  
-  // 拆解籌碼資料 (可相容物件或純數字)
   const totalChip = typeof chipData === "object" && chipData ? (chipData.total || 0) : (parseInt(chipData) || 0);
   const foreignChip = typeof chipData === "object" && chipData ? (chipData.foreign || 0) : 0;
   const trustChip = typeof chipData === "object" && chipData ? (chipData.trust || 0) : 0;
 
-  // 1. 若 R² 過低 (擬合度不足)
   if (r2 < 0.4) {
     container.className = "advice-card advice-warning";
     titleEl.innerHTML = "⚠️ 觀望警訊：五線譜擬合度不足 (R² < 0.4)";
@@ -133,33 +130,26 @@ function updateAdvicePanel(zoneName, r2Value, chipData) {
     return;
   }
 
-  // 2. 判斷位階屬性
   const isExpensive = zoneName.includes("樂觀");
   const isCheap = zoneName.includes("悲觀");
-  
-  // 籌碼狀態判定
   const isStrongBuying = totalChip >= 500;
   const isBuying = totalChip > 0 && totalChip < 500;
   const isSelling = totalChip < 0 && Math.abs(totalChip) < 500;
   const isStrongSelling = totalChip <= -500;
 
-  // 籌碼動態文字
   const chipSign = totalChip > 0 ? "+" : "";
   const chipDescText = `三大法人合計 ${chipSign}${totalChip.toLocaleString()} 張 (外資 ${foreignChip >= 0 ? "+" : ""}${foreignChip} 張 / 投信 ${trustChip >= 0 ? "+" : ""}${trustChip} 張)`;
 
-  // 3. 結合位階與籌碼情境給出建議
   if (isExpensive) {
+    container.className = "advice-card advice-sell";
     if (isStrongSelling || isSelling) {
-      container.className = "advice-card advice-sell";
       titleEl.innerHTML = "⚠️ 高位警訊：位階偏高 + 法人籌碼調節賣超";
       descEl.textContent = `股價已來到【${zoneName}】且接近高檔上緣，配合籌碼面上 ${chipDescText}，修正拉回風險較大，建議持股者分批獲利入袋，未持股者切勿追高。`;
     } else {
-      container.className = "advice-card advice-sell";
       titleEl.innerHTML = "⚠️ 高位留意：樂觀區宜分批停利 / 謹慎追高";
       descEl.textContent = `股價已進入【${zoneName}】偏高區間。雖然籌碼尚未大舉拋售 (${chipDescText})，但統計上勝率偏低，建議調升停利點保護利潤。`;
     }
-  } 
-  else if (isCheap) {
+  } else if (isCheap) {
     if (isStrongBuying || isBuying) {
       container.className = "advice-card advice-strong-buy";
       titleEl.innerHTML = "🎯 強力觀察：低位階 + 法人買超加持";
@@ -169,9 +159,7 @@ function updateAdvicePanel(zoneName, r2Value, chipData) {
       titleEl.innerHTML = "🛒 價值浮現：位階偏低，但籌碼偏向觀望/賣超";
       descEl.textContent = `股價已進入【${zoneName}】，中長期投資價值顯現。惟籌碼面上 ${chipDescText} 尚未轉多，建議採取定期定額或等籌碼止跌轉買再放大部位。`;
     }
-  } 
-  else {
-    // 中線附近/區間盤整 (包含「中線以上」、「中線以下」)
+  } else {
     if (isSelling || isStrongSelling) {
       container.className = "advice-card advice-neutral";
       titleEl.innerHTML = "⚖️ 區間盤整：籌碼偏向調節/觀望，不宜追高";
@@ -198,9 +186,10 @@ function getFundamentals(symbol, currentPrice) {
     return STOCK_FUNDAMENTALS[code];
   }
   const safePrice = currentPrice || 100;
-  const estimatedEps = +(safePrice / 16).toFixed(2);
-  const estimatedDiv = +(safePrice * 0.04).toFixed(2);
-  return { eps: estimatedEps, dividend: estimatedDiv };
+  return {
+    eps: +(safePrice / 16).toFixed(2),
+    dividend: +(safePrice * 0.04).toFixed(2)
+  };
 }
 
 function getStockName(symbol) {
@@ -226,17 +215,14 @@ function getNearestLevel(p) {
     
     if (absDiff < minDiff) {
       minDiff = absDiff;
-      const diffVal = currentPrice - levelPrice;
-      const pct = levelPrice > 0 ? (absDiff / levelPrice) * 100 : 999;
-
       nearest = {
         label: l.label,
         key: l.key,
         color: l.color,
         price: levelPrice,
-        diff: diffVal,
-        absDiff: absDiff,
-        pct: pct
+        diff: currentPrice - levelPrice,
+        absDiff,
+        pct: levelPrice > 0 ? (absDiff / levelPrice) * 100 : 999
       };
     }
   });
@@ -267,12 +253,10 @@ function priceZone(p) {
   return "悲觀區下緣";
 }
 
-// 💡 新增：判斷極簡操作膠囊標籤 (🟢 加碼/佈局, 🟡 觀望/定額, 🔴 減碼/停利)
 function getActionBadge(zoneStr, chipData, r2Value) {
   const r2 = parseFloat(r2Value) || 1;
   const totalChip = (chipData && !chipData.error) ? (chipData.total || 0) : 0;
 
-  // 1. 若 R² 過低，歸類為觀望/定額
   if (r2 < 0.4) {
     return {
       text: "🟡 觀望 / 定額",
@@ -280,7 +264,6 @@ function getActionBadge(zoneStr, chipData, r2Value) {
     };
   }
 
-  // 🔴 減碼 / 停利：高位階 (樂觀區) + 法人賣超
   if ((zoneStr.includes("樂觀") || zoneStr === "中線以上") && totalChip < 0) {
     return {
       text: "🔴 減碼 / 停利",
@@ -288,7 +271,6 @@ function getActionBadge(zoneStr, chipData, r2Value) {
     };
   }
 
-  // 🟢 加碼 / 佈局：低位階 (悲觀區) + 法人買超
   if ((zoneStr.includes("悲觀") || zoneStr === "中線以下") && totalChip > 0) {
     return {
       text: "🟢 加碼 / 佈局",
@@ -296,7 +278,6 @@ function getActionBadge(zoneStr, chipData, r2Value) {
     };
   }
 
-  // 🟡 觀望 / 定額：其他常態情況
   return {
     text: "🟡 觀望 / 定額",
     style: "background-color: #fef3c7; color: #d97706; border: 1px solid #fcd34d;"
@@ -315,15 +296,15 @@ function getPriceRangeDesc(p) {
 }
 
 function getZoneWeight(zoneStr) {
-  switch (zoneStr) {
-    case "悲觀區下緣": return 1;
-    case "相對悲觀區": return 2;
-    case "中線以下": return 3;
-    case "中線以上": return 4;
-    case "相對樂觀區": return 5;
-    case "樂觀區上緣": return 6;
-    default: return 0;
-  }
+  const weights = {
+    "悲觀區下緣": 1,
+    "相對悲觀區": 2,
+    "中線以下": 3,
+    "中線以上": 4,
+    "相對樂觀區": 5,
+    "樂觀區上緣": 6
+  };
+  return weights[zoneStr] || 0;
 }
 
 function formatPrice(v) { 
@@ -393,22 +374,16 @@ function saveWatchlistCache() {
 function updateRemoveSelect() {
   if (!removeWatchlistSelect || !watchlistInput) return;
   const currentText = watchlistInput.value || "";
-  const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+  const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
   
   removeWatchlistSelect.innerHTML = "";
   if (syms.length === 0) {
-    const opt = document.createElement("option");
-    opt.value = "";
-    opt.textContent = "📭 清單為空";
-    removeWatchlistSelect.appendChild(opt);
+    removeWatchlistSelect.add(new Option("📭 清單為空", ""));
     return;
   }
   
   syms.forEach(sym => {
-    const opt = document.createElement("option");
-    opt.value = sym;
-    opt.textContent = sym;
-    removeWatchlistSelect.appendChild(opt);
+    removeWatchlistSelect.add(new Option(sym, sym));
   });
 }
 
@@ -417,8 +392,11 @@ function updateRemoveSelect() {
 // ------------------------------------------
 function regression(values) {
   const n = values.length;
-  const sumX = values.reduce((s, p) => s + p.x, 0);
-  const sumY = values.reduce((s, p) => s + p.y, 0);
+  let sumX = 0, sumY = 0;
+  for (let i = 0; i < n; i++) {
+    sumX += values[i].x;
+    sumY += values[i].y;
+  }
   const meanX = sumX / n;
   const meanY = sumY / n;
   let num = 0, den = 0;
@@ -521,13 +499,10 @@ function renderChart(analysis) {
     <svg id="svgChart" viewBox="0 0 ${width} ${height}" style="background:#fff; border-radius:12px; width:100%; height:100%;">
       <line x1="${margin.left}" y1="${height - margin.bottom}" x2="${width - margin.right}" y2="${height - margin.bottom}" stroke="#94a3b8" stroke-width="1.5" />
       <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${height - margin.bottom}" stroke="#94a3b8" stroke-width="1.5" />
-      
       ${yTicksHtml}
       ${xTicksHtml}
       ${pathsHtml}
-      
       <polyline points="${closePointsStr}" fill="none" stroke="#0f172a" stroke-width="2.5" />
-      
       ${(last.close >= last.plus2 || last.close <= last.minus2) ? `
         <circle cx="${x(totalCount - 1)}" cy="${y(last.close)}" r="10" fill="${last.close >= last.plus2 ? '#c94b4b' : '#12614a'}" opacity="0.4">
           <animate attributeName="r" from="6" to="18" dur="1.2s" repeatCount="indefinite"/>
@@ -535,7 +510,6 @@ function renderChart(analysis) {
         </circle>
       ` : ""}
       <circle cx="${x(totalCount - 1)}" cy="${y(last.close)}" r="5" fill="#0f172a" />
-      
       <line id="tooltipLine" x1="0" y1="${margin.top}" x2="0" y2="${height - margin.bottom}" stroke="#64748b" stroke-width="1" stroke-dasharray="3 3" style="display:none;" />
     </svg>
   `;
@@ -564,9 +538,8 @@ function renderChart(analysis) {
           tooltipLine.style.display = "block";
 
           let tooltipLeft = currX + 15;
-          if (tooltipLeft + 190 > width) {
-            tooltipLeft = currX - 215;
-          }
+          if (tooltipLeft + 190 > width) tooltipLeft = currX - 215;
+          
           const scaleX = rect.width / width;
           const scaleY = rect.height / height;
 
@@ -642,10 +615,9 @@ function render() {
       yieldText.textContent = `${((fun.dividend / last.close) * 100).toFixed(2)} %`;
     }
 
-    // 💡 觸發建議更新：傳入位階、R2 與籌碼物件供建議面板評估
     updateAdvicePanel(zoneStr, last.r2, currentMainChipData);
-
     renderChart(analysis);
+
     if (levelsTable) {
       levelsTable.innerHTML = levelDefs.map(l => `<tr><td>${l.label}</td><td>${formatPrice(last[l.key])}</td><td>${priceZone(last) === l.label ? "●" : ""}</td></tr>`).join("");
     }
@@ -666,6 +638,8 @@ async function loadMainChipData(symbol) {
 
   try {
     const res = await fetch(`/api/chip?symbol=${encodeURIComponent(symbol)}`);
+    if (!res.ok) throw new Error("API 響應異常");
+    
     const chip = await res.json();
     if (!chip || chip.error) {
       chipEl.innerHTML = `<span style="color:var(--muted); font-size:0.85em;">尚無今日盤後籌碼資料或非台股標的</span>`;
@@ -729,12 +703,10 @@ async function fetchLevelForWatchlist(symbol) {
   const chipData = chipRes.status === "fulfilled" ? chipRes.value : null;
   const analysis = buildAnalysis(json.rows, "linear", "3.5");
 
-  const displayName = json.name || getStockName(json.symbol) || "";
-
   return { 
     sym: json.symbol, 
     last: analysis[analysis.length - 1], 
-    name: displayName,
+    name: json.name || getStockName(json.symbol) || "",
     chip: chipData
   };
 }
@@ -782,20 +754,12 @@ function updateWatchlistDisplay() {
     return matchSearch && matchZone;
   });
 
-	resultList.sort((a, b) => {
-    if (sortMode === "code") {
-      return a.sym.localeCompare(b.sym);
-    } else if (sortMode === "rankAsc") {
-      // 🟢 低到高：分數小的排前面 (a - b)
-      return getZoneWeight(priceZone(a.last)) - getZoneWeight(priceZone(b.last));
-    } else if (sortMode === "rankDesc") {
-      // 🔴 高到低：分數大的排前面 (b - a)  <-- 改這裡！
-      return getZoneWeight(priceZone(b.last)) - getZoneWeight(priceZone(a.last));
-    } else if (sortMode === "nearAsc") {
-      return getNearestDistance(a.last) - getNearestDistance(b.last);
-    } else if (sortMode === "nearDesc") {
-      return getNearestDistance(b.last) - getNearestDistance(a.last);
-    }
+  resultList.sort((a, b) => {
+    if (sortMode === "code") return a.sym.localeCompare(b.sym);
+    if (sortMode === "rankAsc") return getZoneWeight(priceZone(a.last)) - getZoneWeight(priceZone(b.last));
+    if (sortMode === "rankDesc") return getZoneWeight(priceZone(b.last)) - getZoneWeight(priceZone(a.last));
+    if (sortMode === "nearAsc") return getNearestDistance(a.last) - getNearestDistance(b.last);
+    if (sortMode === "nearDesc") return getNearestDistance(b.last) - getNearestDistance(a.last);
     return 0;
   });
 
@@ -804,6 +768,8 @@ function updateWatchlistDisplay() {
     watchlistResult.innerHTML = `<div style="color:var(--muted); font-size:0.85rem; padding:12px; text-align:center;">無符合篩選條件的標的</div>`;
     return;
   }
+
+  const fragment = document.createDocumentFragment();
 
   resultList.forEach(item => {
     const isSellSignal = item.last.close >= item.last.plus2; 
@@ -842,10 +808,7 @@ function updateWatchlistDisplay() {
 
     const nearest = getNearestLevel(item.last);
     const nearestHint = formatNearestText(nearest);
-
     const displayName = item.name || getStockName(item.sym) || "";
-
-    // 💡 取得操作膠囊標籤 Badge
     const badge = getActionBadge(priceZone(item.last), item.chip, item.last.r2);
 
     card.innerHTML = `
@@ -863,11 +826,9 @@ function updateWatchlistDisplay() {
       </div>
       <div style="text-align:right;">
         <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-bottom: 2px;">
-          <!-- 新增的操作膠囊標籤 -->
           <span style="font-size: 0.72rem; font-weight: bold; padding: 2px 8px; border-radius: 12px; ${badge.style}">
             ${badge.text}
           </span>
-          <!-- 原有的位階文字 -->
           <span style="font-weight:900; color:${zoneColor}">${priceZone(item.last)}</span>
         </div>
         <small style="color:${smallTextColor}">區間: ${getPriceRangeDesc(item.last)}</small>
@@ -893,11 +854,15 @@ function updateWatchlistDisplay() {
       if (fetchSymbolBtn) fetchSymbolBtn.click();
     });
 
-    watchlistResult.appendChild(card);
+    fragment.appendChild(card);
   });
+
+  watchlistResult.appendChild(fragment);
 }
 
-// 事件綁定統一管理
+// ------------------------------------------
+// 10. 事件綁定統一管理
+// ------------------------------------------
 function bindEvents() {
   if (btnWatchlist) {
     btnWatchlist.addEventListener("click", async () => {
@@ -907,7 +872,7 @@ function bindEvents() {
       const syms = rawInput
         .split(",")
         .map(s => s.trim().toUpperCase())
-        .filter(s => s.length > 0)
+        .filter(Boolean)
         .slice(0, MAX_WATCHLIST_LIMIT);
 
       if (syms.length === 0) {
@@ -925,7 +890,6 @@ function bindEvents() {
 
       try {
         const results = await fetchInBatches(syms, 5);
-
         let successCount = 0;
         let failCount = 0;
 
@@ -949,7 +913,6 @@ function bindEvents() {
           watchlistStatus.textContent = `⚠️ 更新完成：成功 ${successCount} 檔，失敗 ${failCount} 檔`;
           watchlistStatus.style.color = "#d9852b";
         }
-
       } catch (err) {
         console.error("批量更新過程發生未預期錯誤:", err);
         watchlistStatus.textContent = "❌ 批量更新失敗，請檢查網路或 API 狀態。";
@@ -960,7 +923,6 @@ function bindEvents() {
     });
   }
 
-  // 個股查詢與單一操作邏輯
   if (fetchSymbolBtn) {
     fetchSymbolBtn.addEventListener("click", async () => {
       if (fetchStatus) fetchStatus.textContent = "讀取中...";
@@ -999,27 +961,16 @@ function bindEvents() {
     });
   }
 
-  // 圖表標題旁「⭐ 加入觀察清單」按鈕
   if (btnAddToWatchlist) {
     btnAddToWatchlist.addEventListener("click", async () => {
       const rawSym = symbolInput.value.trim().toUpperCase();
-      if (!rawSym) {
-        alert("⚠️ 請先輸入股票代碼！");
-        return;
-      }
+      if (!rawSym) return alert("⚠️ 請先輸入股票代碼！");
 
       const currentText = watchlistInput.value || "";
-      const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+      const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
 
-      if (syms.includes(rawSym)) {
-        alert(`⚠️ 股號 ${rawSym} 已在觀察清單中！`);
-        return;
-      }
-
-      if (syms.length >= MAX_WATCHLIST_LIMIT) {
-        alert(`⚠️ 觀察清單最多只能 ${MAX_WATCHLIST_LIMIT} 支股票！`);
-        return;
-      }
+      if (syms.includes(rawSym)) return alert(`⚠️ 股號 ${rawSym} 已在觀察清單中！`);
+      if (syms.length >= MAX_WATCHLIST_LIMIT) return alert(`⚠️ 觀察清單最多只能 ${MAX_WATCHLIST_LIMIT} 支股票！`);
 
       syms.push(rawSym);
       watchlistInput.value = syms.join(", ");
@@ -1043,14 +994,13 @@ function bindEvents() {
     });
   }
 
-  // 單一新增個股邏輯
   if (btnAddWatchlistSingle) {
     btnAddWatchlistSingle.addEventListener("click", async () => {
       const newSym = addWatchlistInput.value.trim().toUpperCase();
       if (!newSym) return;
       
       const currentText = watchlistInput.value || "";
-      const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+      const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
       
       if (syms.includes(newSym)) {
         if (watchlistStatus) watchlistStatus.textContent = `⚠️ 股號 ${newSym} 已在清單中！`;
@@ -1090,14 +1040,13 @@ function bindEvents() {
     });
   }
 
-  // 單一刪除個股邏輯
   if (btnRemoveWatchlistSingle) {
     btnRemoveWatchlistSingle.addEventListener("click", () => {
       const toRemove = removeWatchlistSelect.value;
       if (!toRemove || toRemove === "📭 清單為空") return;
       
       const currentText = watchlistInput.value || "";
-      const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+      const syms = currentText.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
       
       const filtered = syms.filter(s => s !== toRemove);
       watchlistInput.value = filtered.join(", ");
@@ -1118,7 +1067,6 @@ function bindEvents() {
     });
   }
 
-  // 全部清除 / 復原清單
   if (btnClearWatchlist) {
     btnClearWatchlist.addEventListener("click", () => {
       if (btnClearWatchlist.textContent.includes("全部清除")) {
@@ -1151,7 +1099,6 @@ function bindEvents() {
     });
   }
 
-  // 複製與智慧併集合併匯入
   if (btnExportWatchlist) {
     btnExportWatchlist.addEventListener("click", (e) => {
       e.preventDefault();
@@ -1161,19 +1108,15 @@ function bindEvents() {
         return;
       }
       
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(currentText).then(() => {
+      navigator.clipboard?.writeText(currentText)
+        .then(() => {
           if (watchlistStatus) watchlistStatus.textContent = "📋 清單已自動複製到剪貼簿！可傳送至手機/其他裝置匯入。";
-        }).catch(() => {
+        })
+        .catch(() => {
           watchlistInput.select();
           document.execCommand("copy");
           if (watchlistStatus) watchlistStatus.textContent = "📋 清單已複製到剪貼簿！";
         });
-      } else {
-        watchlistInput.select();
-        document.execCommand("copy");
-        if (watchlistStatus) watchlistStatus.textContent = "📋 清單已複製到剪貼簿！";
-      }
     });
   }
 
@@ -1183,23 +1126,12 @@ function bindEvents() {
       const userInput = prompt("請貼上您要匯入的股票代號（例如: 2330, 2317, 2454）：");
       if (userInput === null) return;
       
-      const existingSyms = (watchlistInput.value || "")
-        .split(",")
-        .map(s => s.trim().toUpperCase())
-        .filter(s => s);
+      const existingSyms = (watchlistInput.value || "").split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
+      const importedSyms = userInput.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
 
-      const importedSyms = userInput
-        .split(",")
-        .map(s => s.trim().toUpperCase())
-        .filter(s => s);
+      if (importedSyms.length === 0) return alert("⚠️ 輸入內容無有效股票代碼！");
 
-      if (importedSyms.length === 0) {
-        alert("⚠️ 輸入內容無有效股票代碼！");
-        return;
-      }
-
-      const mergedSet = new Set([...existingSyms, ...importedSyms]);
-      const mergedList = Array.from(mergedSet);
+      const mergedList = Array.from(new Set([...existingSyms, ...importedSyms]));
 
       if (mergedList.length > MAX_WATCHLIST_LIMIT) {
         alert(`⚠️ 合併後數量超過 ${MAX_WATCHLIST_LIMIT} 支上限，將自動截取保留前 ${MAX_WATCHLIST_LIMIT} 支股票。`);
