@@ -250,11 +250,11 @@
         </select>
       </div>
 
-      <!-- 💡 新增：顯示／隱藏樂活通道勾選框 -->
+      <!-- 💡 顯示／隱藏樂活通道勾選框 (同時支援 #toggleBand 與 #showChannelCheckbox) -->
       <div class="form-group" style="margin-top: 15px;">
         <label class="checkbox-label">
-          <input type="checkbox" id="toggleBand" checked>
-          <span>顯示樂活通道 (Band Channel)</span>
+          <input type="checkbox" id="toggleBand" class="showChannelCheckbox" checked>
+          <span>顯示樂活通道 (Band Channel / 20SMA ± 2ATR)</span>
         </label>
       </div>
 
@@ -386,5 +386,15 @@
   </div>
 
   <script src="script.js"></script>
+  <!-- 💡 DOM 選擇器雙向容錯補充腳本 -->
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      // 確保 #showChannelCheckbox DOM 指向 #toggleBand，避免不同 JS 命名造成抓取不到元素
+      window.toggleBandEl = document.getElementById("toggleBand") || document.getElementById("showChannelCheckbox");
+      if (window.toggleBandEl && !document.getElementById("showChannelCheckbox")) {
+        window.toggleBandEl.id = "toggleBand";
+      }
+    });
+  </script>
 </body>
 </html>

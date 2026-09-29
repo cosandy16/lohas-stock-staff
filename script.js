@@ -1,5 +1,5 @@
 // ==========================================
-// 樂活通道 / 股票觀察清單 腳本 (script.js)
+// 樂活通道 / 均線通道 / 五線譜 / 股票觀察清單 腳本 (script.js)
 // ==========================================
 
 const MAX_WATCHLIST_LIMIT = 40;
@@ -51,7 +51,7 @@ const STOCK_FUNDAMENTALS = {
 // 2. DOM 元素選取與全域變數
 // ------------------------------------------
 let csvInput, market, symbolInput, fetchSymbolBtn, fetchStatus, periodYears, modelMode;
-let showChannelCheckbox; // 🔹 新增：樂活通道開關 Checkbox
+let showChannelCheckbox, toggleBand; // 🔹 支援 #showChannelCheckbox 與 #toggleBand 雙 DOM 相容
 let chart, chartTitle, btnAddToWatchlist, rangeText, zoneText, closeText, r2Text, levelsTable;
 let peText, yieldText, watchlistInput, btnWatchlist, btnClearWatchlist, watchlistResult;
 let watchlistStatus, addWatchlistInput, btnAddWatchlistSingle, removeWatchlistSelect;
@@ -78,8 +78,9 @@ function initDOMElements() {
   periodYears = document.querySelector("#periodYears");
   modelMode = document.querySelector("#modelMode");
   
-  // 🔹 抓取「顯示樂活通道」核取方塊 (請確認 HTML 中 id/selector 是否匹配)
-  showChannelCheckbox = document.querySelector("#showChannelCheckbox") || document.querySelector("input[type='checkbox']");
+  // 🔹 抓取「顯示樂活通道」相關控制項（支援 #toggleBand 與 #showChannelCheckbox）
+  toggleBand = document.querySelector("#toggleBand");
+  showChannelCheckbox = document.querySelector("#showChannelCheckbox");
 
   chart = document.querySelector("#chart");
   chartTitle = document.querySelector("#chartTitle");
@@ -111,6 +112,16 @@ function initDOMElements() {
   watchlistSearch = document.querySelector("#watchlistSearch");
   watchlistFilterZone = document.querySelector("#watchlistFilterZone");
   watchlistSort = document.querySelector("#watchlistSort");
+}
+
+// 判斷當前樂活通道開關狀態 (相容 #toggleBand 與 #showChannelCheckbox)
+function isBandChannelActive() {
+  if (toggleBand) {
+    if (toggleBand.type === "checkbox") return toggleBand.checked;
+    if (toggleBand.classList) return toggleBand.classList.contains("active");
+  }
+  if (showChannelCheckbox) return showChannelCheckbox.checked;
+  return true;
 }
 
 // ------------------------------------------
@@ -393,8 +404,70 @@ function updateRemoveSelect() {
 }
 
 // ------------------------------------------
-// 6. 迴歸分析與通道計算
+// 6. 迴歸分析與樂活通道 (Band Channel / ATR) 計算
 // ------------------------------------------
+
+// 🔹 樂活通道關鍵：ATR (Average True Range) 計算
+function calculateATR(data, period = 14) {
+  if (!data || data.length === 0) return [];
+  
+  const tr = [];
+  for (let i = 0; i < data.length; i++) {
+    const high = data[i].high !== undefined ? data[i].high : data[i].close;
+    const low = data[i].low !== undefined ? data[i].low : data[i].close;
+    const prevClose = i > 0 ? data[i - 1].close : data[i].close;
+    
+    const trValue = Math.max(
+      high - low,
+      Math.abs(high - prevClose),
+      Math.abs(low - prevClose)
+    );
+    tr.push(trValue);
+  }
+
+  const atr = new Array(data.length).fill(0);
+  let sumTR = 0;
+  for (let i = 0; i < data.length; i++) {
+    sumTR += tr[i];
+    if (i >= period) {
+      sumTR -= tr[i - period];
+      atr[i] = sumTR / period;
+    } else {
+      atr[i] = sumTR / (i + 1);
+    }
+  }
+  return atr;
+}
+
+// 🔹 樂活通道關鍵：20SMA 中軌與上下軌 (20SMA ± 2 * ATR) 計算
+function calculateBandChannel(data, smaPeriod = 20, atrPeriod = 14, multiplier = 2) {
+  const atrValues = calculateATR(data, atrPeriod);
+  
+  return data.map((p, index) => {
+    let sma20 = p.close;
+    if (index >= smaPeriod - 1) {
+      let sum = 0;
+      for (let i = index - smaPeriod + 1; i <= index; i++) {
+        sum += data[i].close;
+      }
+      sma20 = sum / smaPeriod;
+    } else {
+      let sum = 0;
+      for (let i = 0; i <= index; i++) {
+        sum += data[i].close;
+      }
+      sma20 = sum / (index + 1);
+    }
+
+    const currentATR = atrValues[index] || 0;
+    return {
+      bandMid: sma20,
+      bandUpper: sma20 + multiplier * currentATR,
+      bandLower: sma20 - multiplier * currentATR
+    };
+  });
+}
+
 function regression(values) {
   const n = values.length;
   let sumX = 0, sumY = 0;
@@ -436,8 +509,10 @@ function buildAnalysis(data, currentMode = (modelMode ? modelMode.value : "linea
     y: useLog ? Math.log(p.close) : p.close
   }));
 
+  const bandData = calculateBandChannel(points, 20, 14, 2);
+
   const fit = regression(points);
-  return points.map(p => {
+  return points.map((p, idx) => {
     const midRaw = fit.intercept + fit.slope * p.x;
     const conv = (v) => useLog ? Math.exp(v) : v;
     return {
@@ -447,7 +522,11 @@ function buildAnalysis(data, currentMode = (modelMode ? modelMode.value : "linea
       mid: conv(midRaw),
       minus1: conv(midRaw - fit.sd),
       minus2: conv(midRaw - fit.sd * 2),
-      r2: fit.r2
+      r2: fit.r2,
+      // 疊加樂活通道指標
+      bandMid: bandData[idx].bandMid,
+      bandUpper: bandData[idx].bandUpper,
+      bandLower: bandData[idx].bandLower
     };
   });
 }
@@ -461,8 +540,8 @@ function renderChart(analysis) {
   const margin = { top: 35, right: 60, bottom: 45, left: 65 };
   const last = analysis[analysis.length - 1];
   
-  const minP = Math.min(...analysis.map(p => Math.min(p.close, p.minus2))) * 0.97;
-  const maxP = Math.max(...analysis.map(p => Math.max(p.close, p.plus2))) * 1.03;
+  const minP = Math.min(...analysis.map(p => Math.min(p.close, p.minus2, p.bandLower || p.close))) * 0.97;
+  const maxP = Math.max(...analysis.map(p => Math.max(p.close, p.plus2, p.bandUpper || p.close))) * 1.03;
   
   const x = (i) => margin.left + (i / (analysis.length - 1)) * (width - margin.left - margin.right);
   const y = (val) => height - margin.bottom - ((val - minP) / (maxP - minP)) * (height - margin.top - margin.bottom);
@@ -493,14 +572,27 @@ function renderChart(analysis) {
     }
   });
 
-  // 🔹 根據 Checkbox 勾選狀態來決定是否繪製五線譜通道
-  const shouldShowChannels = showChannelCheckbox ? showChannelCheckbox.checked : true;
-  const pathsHtml = shouldShowChannels 
-    ? levelDefs.map(l => {
-        const pointsStr = analysis.map((p, i) => `${x(i)},${y(p[l.key])}`).join(" ");
-        return `<polyline points="${pointsStr}" fill="none" stroke="${l.color}" stroke-width="${l.key === 'mid' ? 2.5 : 1.2}" opacity="0.75" />`;
-      }).join("")
-    : "";
+  // 🔹 預設五線譜軌道
+  const fiveLinesHtml = levelDefs.map(l => {
+    const pointsStr = analysis.map((p, i) => `${x(i)},${y(p[l.key])}`).join(" ");
+    return `<polyline points="${pointsStr}" fill="none" stroke="${l.color}" stroke-width="${l.key === 'mid' ? 2.5 : 1.2}" opacity="0.75" />`;
+  }).join("");
+
+  // 🔹 根據 Checkbox / Toggle 開關控制是否繪製樂活通道 (Band Channel)
+  const isBandActive = isBandChannelActive();
+  let bandChannelHtml = "";
+
+  if (isBandActive) {
+    const upperPointsStr = analysis.map((p, i) => `${x(i)},${y(p.bandUpper)}`).join(" ");
+    const midPointsStr = analysis.map((p, i) => `${x(i)},${y(p.bandMid)}`).join(" ");
+    const lowerPointsStr = analysis.map((p, i) => `${x(i)},${y(p.bandLower)}`).join(" ");
+
+    bandChannelHtml = `
+      <polyline points="${upperPointsStr}" fill="none" stroke="#e11d48" stroke-width="1.8" stroke-dasharray="4 2" opacity="0.95" />
+      <polyline points="${midPointsStr}" fill="none" stroke="#d97706" stroke-width="2" stroke-dasharray="6 3" opacity="0.95" />
+      <polyline points="${lowerPointsStr}" fill="none" stroke="#059669" stroke-width="1.8" stroke-dasharray="4 2" opacity="0.95" />
+    `;
+  }
 
   const closePointsStr = analysis.map((p, i) => `${x(i)},${y(p.close)}`).join(" ");
 
@@ -510,9 +602,10 @@ function renderChart(analysis) {
       <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${height - margin.bottom}" stroke="#94a3b8" stroke-width="1.5" />
       ${yTicksHtml}
       ${xTicksHtml}
-      ${pathsHtml}
+      ${fiveLinesHtml}
+      ${bandChannelHtml}
       <polyline points="${closePointsStr}" fill="none" stroke="#0f172a" stroke-width="2.5" />
-      ${(shouldShowChannels && (last.close >= last.plus2 || last.close <= last.minus2)) ? `
+      ${(last.close >= last.plus2 || last.close <= last.minus2) ? `
         <circle cx="${x(totalCount - 1)}" cy="${y(last.close)}" r="10" fill="${last.close >= last.plus2 ? '#c94b4b' : '#12614a'}" opacity="0.4">
           <animate attributeName="r" from="6" to="18" dur="1.2s" repeatCount="indefinite"/>
           <animate attributeName="opacity" from="0.6" to="0" dur="1.2s" repeatCount="indefinite"/>
@@ -547,7 +640,7 @@ function renderChart(analysis) {
           tooltipLine.style.display = "block";
 
           let tooltipLeft = currX + 15;
-          if (tooltipLeft + 190 > width) tooltipLeft = currX - 215;
+          if (tooltipLeft + 210 > width) tooltipLeft = currX - 225;
           
           const scaleX = rect.width / width;
           const scaleY = rect.height / height;
@@ -566,6 +659,11 @@ function renderChart(analysis) {
             <div><span>收盤價:</span><strong>${formatPrice(point.raw_close || point.close)}</strong></div>
             <div><span>本益比:</span><strong style="color:var(--blue);">${histPe}</strong></div>
             <div><span>估計殖利率:</span><strong style="color:var(--green);">${histYield}</strong></div>
+            ${isBandActive ? `
+              <div style="border-top:1px dashed rgba(255,255,255,0.2); margin-top:4px; padding-top:4px; color:#f43f5e;"><span>通道上軌:</span><span>${formatPrice(point.bandUpper)}</span></div>
+              <div style="color:#f59e0b;"><span>20SMA中軌:</span><span>${formatPrice(point.bandMid)}</span></div>
+              <div style="color:#10b981;"><span>通道下軌:</span><span>${formatPrice(point.bandLower)}</span></div>
+            ` : ''}
             <div style="border-top:1px dashed rgba(255,255,255,0.15); margin-top:4px; padding-top:4px;"><span>+2SD 樂觀:</span><span>${formatPrice(point.plus2)}</span></div>
             <div><span>+1SD 偏樂:</span><span>${formatPrice(point.plus1)}</span></div>
             <div><span>中線:</span><span>${formatPrice(point.mid)}</span></div>
@@ -873,12 +971,19 @@ function updateWatchlistDisplay() {
 // 10. 事件綁定統一管理
 // ------------------------------------------
 function bindEvents() {
-  // 🔹 綁定 Checkbox 點擊切換事件
+  // 🔹 綁定 Checkbox / Toggle 切換事件 (相容 #toggleBand 與 #showChannelCheckbox)
+  const handleBandToggle = () => render();
+
   if (showChannelCheckbox) {
-    showChannelCheckbox.addEventListener("change", () => {
-      render();
-    });
+    showChannelCheckbox.addEventListener("change", handleBandToggle);
   }
+  if (toggleBand) {
+    toggleBand.addEventListener("change", handleBandToggle);
+    toggleBand.addEventListener("click", handleBandToggle);
+  }
+
+  if (periodYears) periodYears.addEventListener("change", render);
+  if (modelMode) modelMode.addEventListener("change", render);
 
   if (btnWatchlist) {
     btnWatchlist.addEventListener("click", async () => {
