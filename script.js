@@ -51,6 +51,7 @@ const STOCK_FUNDAMENTALS = {
 // 2. DOM 元素選取與全域變數
 // ------------------------------------------
 let csvInput, market, symbolInput, fetchSymbolBtn, fetchStatus, periodYears, modelMode;
+let showChannelCheckbox; // 🔹 新增：樂活通道開關 Checkbox
 let chart, chartTitle, btnAddToWatchlist, rangeText, zoneText, closeText, r2Text, levelsTable;
 let peText, yieldText, watchlistInput, btnWatchlist, btnClearWatchlist, watchlistResult;
 let watchlistStatus, addWatchlistInput, btnAddWatchlistSingle, removeWatchlistSelect;
@@ -76,6 +77,10 @@ function initDOMElements() {
   fetchStatus = document.querySelector("#fetchStatus");
   periodYears = document.querySelector("#periodYears");
   modelMode = document.querySelector("#modelMode");
+  
+  // 🔹 抓取「顯示樂活通道」核取方塊 (請確認 HTML 中 id/selector 是否匹配)
+  showChannelCheckbox = document.querySelector("#showChannelCheckbox") || document.querySelector("input[type='checkbox']");
+
   chart = document.querySelector("#chart");
   chartTitle = document.querySelector("#chartTitle");
   btnAddToWatchlist = document.querySelector("#btnAddToWatchlist");
@@ -488,11 +493,14 @@ function renderChart(analysis) {
     }
   });
 
-  // 🔹 繪製樂活通道（五線譜：+2SD, +1SD, 中線, -1SD, -2SD）
-  const pathsHtml = levelDefs.map(l => {
-    const pointsStr = analysis.map((p, i) => `${x(i)},${y(p[l.key])}`).join(" ");
-    return `<polyline points="${pointsStr}" fill="none" stroke="${l.color}" stroke-width="${l.key === 'mid' ? 2.5 : 1.2}" opacity="0.75" />`;
-  }).join("");
+  // 🔹 根據 Checkbox 勾選狀態來決定是否繪製五線譜通道
+  const shouldShowChannels = showChannelCheckbox ? showChannelCheckbox.checked : true;
+  const pathsHtml = shouldShowChannels 
+    ? levelDefs.map(l => {
+        const pointsStr = analysis.map((p, i) => `${x(i)},${y(p[l.key])}`).join(" ");
+        return `<polyline points="${pointsStr}" fill="none" stroke="${l.color}" stroke-width="${l.key === 'mid' ? 2.5 : 1.2}" opacity="0.75" />`;
+      }).join("")
+    : "";
 
   const closePointsStr = analysis.map((p, i) => `${x(i)},${y(p.close)}`).join(" ");
 
@@ -504,7 +512,7 @@ function renderChart(analysis) {
       ${xTicksHtml}
       ${pathsHtml}
       <polyline points="${closePointsStr}" fill="none" stroke="#0f172a" stroke-width="2.5" />
-      ${(last.close >= last.plus2 || last.close <= last.minus2) ? `
+      ${(shouldShowChannels && (last.close >= last.plus2 || last.close <= last.minus2)) ? `
         <circle cx="${x(totalCount - 1)}" cy="${y(last.close)}" r="10" fill="${last.close >= last.plus2 ? '#c94b4b' : '#12614a'}" opacity="0.4">
           <animate attributeName="r" from="6" to="18" dur="1.2s" repeatCount="indefinite"/>
           <animate attributeName="opacity" from="0.6" to="0" dur="1.2s" repeatCount="indefinite"/>
@@ -865,6 +873,13 @@ function updateWatchlistDisplay() {
 // 10. 事件綁定統一管理
 // ------------------------------------------
 function bindEvents() {
+  // 🔹 綁定 Checkbox 點擊切換事件
+  if (showChannelCheckbox) {
+    showChannelCheckbox.addEventListener("change", () => {
+      render();
+    });
+  }
+
   if (btnWatchlist) {
     btnWatchlist.addEventListener("click", async () => {
       const rawInput = watchlistInput.value;
