@@ -488,14 +488,11 @@ function renderChart(analysis) {
     }
   });
 
-  // 🔹 預設不安裝/顯示樂活通道（五線譜）。若日後欲開啟，可將改為顯示 pathsHtml
-  const pathsHtml = ""; 
-  /* 
+  // 🔹 繪製樂活通道（五線譜：+2SD, +1SD, 中線, -1SD, -2SD）
   const pathsHtml = levelDefs.map(l => {
     const pointsStr = analysis.map((p, i) => `${x(i)},${y(p[l.key])}`).join(" ");
     return `<polyline points="${pointsStr}" fill="none" stroke="${l.color}" stroke-width="${l.key === 'mid' ? 2.5 : 1.2}" opacity="0.75" />`;
   }).join("");
-  */
 
   const closePointsStr = analysis.map((p, i) => `${x(i)},${y(p.close)}`).join(" ");
 
