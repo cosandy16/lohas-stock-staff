@@ -711,7 +711,7 @@ function render() {
 	if (closeText) {
       const curPrice = Number(last.raw_close ?? last.close);
       
-      // 嘗試從歷史陣列中尋找「不同日期」的上一交易日收盤價
+      // 尋找「不同日期」的上一交易日收盤價作為基準
       const lastDate = last.date;
       const prevPoint = [...analysis].reverse().find(p => p.date !== lastDate);
       const prevPrice = prevPoint ? Number(prevPoint.raw_close ?? prevPoint.close) : curPrice;
@@ -841,32 +841,30 @@ async function fetchLevelForWatchlist(symbol) {
 
   const last = analysis[analysis.length - 1];
 
-	let priceChange = 0;
-  let priceChangePct = 0;
+  // 1. 取得當前現價
+  const currentRealPrice = Number(json.regularMarketPrice ?? last.raw_close ?? last.close);
 
-  if (typeof json.regularMarketChange === "number" && typeof json.regularMarketChangePercent === "number" && json.regularMarketChange !== 0) {
-    priceChange = json.regularMarketChange;
-    priceChangePct = json.regularMarketChangePercent;
-  } else {
-    const currentRealPrice = Number(json.regularMarketPrice ?? last.raw_close ?? last.close);
-    let prevRealPrice = Number(json.previousClose ?? json.regularMarketPreviousClose);
+  // 2. 取得前一交易日收盤價 (優先使用 Yahoo 的 previousClose)
+  let prevRealPrice = Number(json.previousClose ?? json.regularMarketPreviousClose);
 
-    // 如果 Yahoo 沒有回傳 previousClose，從歷史 K 線搜尋「上一交易日」
-    if (!prevRealPrice || isNaN(prevRealPrice) || prevRealPrice <= 0) {
-      if (analysis.length >= 2) {
-        const lastDate = last.date;
-        const prevPoint = [...analysis].reverse().find(p => p.date !== lastDate);
-        if (prevPoint) {
-          prevRealPrice = Number(prevPoint.raw_close ?? prevPoint.close);
-        }
+  // 3. 若 Yahoo 沒有提供有效 previousClose，從歷史 K 線陣列尋找「上一交易日」
+  if (!prevRealPrice || isNaN(prevRealPrice) || prevRealPrice <= 0) {
+    if (analysis.length >= 2) {
+      const lastDate = last.date;
+      const prevPoint = [...analysis].reverse().find(p => p.date !== lastDate);
+      if (prevPoint) {
+        prevRealPrice = Number(prevPoint.raw_close ?? prevPoint.close);
       }
     }
-
-    if (!prevRealPrice || isNaN(prevRealPrice)) prevRealPrice = currentRealPrice;
-
-    priceChange = currentRealPrice - prevRealPrice;
-    priceChangePct = prevRealPrice > 0 ? (priceChange / prevRealPrice) * 100 : 0;
   }
+
+  if (!prevRealPrice || isNaN(prevRealPrice) || prevRealPrice <= 0) {
+    prevRealPrice = currentRealPrice;
+  }
+
+  // 4. 強制自行計算精確的漲跌金額與漲跌幅
+  const priceChange = currentRealPrice - prevRealPrice;
+  const priceChangePct = prevRealPrice > 0 ? (priceChange / prevRealPrice) * 100 : 0;
 
   return { 
     sym: json.symbol, 
