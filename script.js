@@ -810,29 +810,43 @@ async function fetchLevelForWatchlist(symbol) {
   const chipData = chipRes.status === "fulfilled" ? chipRes.value : null;
   const analysis = buildAnalysis(json.rows, "linear", "3.5");
 
-  // 1. 取得最新一筆當天現價資料
+  // 1. 取得最新一筆 K 線（當天）
   const last = analysis[analysis.length - 1];
-  const closePrice = Number(last.raw_close || last.close);
+  
+  // 🔹 修正重點 1：真實現價優先抓 raw_close，避免吃到被迴歸修正過的 close
+  const currentRealPrice = Number(last.raw_close !== undefined ? last.raw_close : last.close);
 
-  // 2. 精確尋找「前一交易日」的收盤價 (prevClosePrice)
-  let prevClosePrice = null;
+  // 2. 取前一交易日的真實收盤價
+  let prevRealPrice = null;
 
-  // A 方案：若 API 有直接回傳 official previousClose 且大於 0
+  // 優先看 API 是否有帶 official previousClose
   if (json.previousClose && Number(json.previousClose) > 0) {
-    prevClosePrice = Number(json.previousClose);
-  }
-
-  // B 方案：從 K 線歷史數據中，由後往前找「第一筆日期與最新一筆不同」的資料
-  if (!prevClosePrice) {
-    const lastDateStr = String(last.date).split("T")[0]; // 只比對 YYYY-MM-DD
-    for (let i = analysis.length - 2; i >= 0; i--) {
-      const itemDateStr = String(analysis[i].date).split("T")[0];
-      if (itemDateStr !== lastDateStr) {
-        prevClosePrice = Number(analysis[i].raw_close || analysis[i].close);
-        break;
-      }
+    prevRealPrice = Number(json.previousClose);
+  } else if (analysis.length >= 2) {
+    // 從倒數第二筆往前找不同日期的 K 線
+    const lastDate = last.date;
+    const prevPoint = [...analysis].reverse().find(p => p.date !== lastDate);
+    if (prevPoint) {
+      prevRealPrice = Number(prevPoint.raw_close !== undefined ? prevPoint.raw_close : prevPoint.close);
     }
   }
+
+  // 保底：若完全抓不到昨收，設為當前現價
+  if (!prevRealPrice) prevRealPrice = currentRealPrice;
+
+  // 🔹 修正重點 2：用「真實現價」減去「真實昨收」
+  const priceChange = currentRealPrice - prevRealPrice;
+  const priceChangePct = prevRealPrice > 0 ? (priceChange / prevRealPrice) * 100 : 0;
+
+  return { 
+    sym: json.symbol, 
+    last: last, 
+    change: priceChange,
+    changePct: priceChangePct,
+    name: json.name || getStockName(json.symbol) || "",
+    chip: chipData
+  };
+}
 
   // C 防護方案：若還是找不到，嘗試取倒數第二筆 K 線
   if (!prevClosePrice && analysis.length >= 2) {
