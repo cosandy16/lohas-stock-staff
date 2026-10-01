@@ -837,32 +837,38 @@ async function fetchLevelForWatchlist(symbol) {
   const chipData = chipRes.status === "fulfilled" ? chipRes.value : null;
   const analysis = buildAnalysis(json.rows, "linear", "3.5");
 
-  // 1. 取得最新一筆 K 線 (當天)
+  // 1. 取得迴歸五線譜分析之最後一筆數據
   const last = analysis[analysis.length - 1];
-  
-  // 優先採用 Yahoo API 帶出的真實最新價 (regularMarketPrice) 或原始 K 線 raw_close
-  const currentRealPrice = Number(json.regularMarketPrice ?? last.raw_close ?? last.close);
 
-  // 2. 優先取得真實前一交易日收盤價 (previousClose)
-  let prevRealPrice = Number(json.previousClose ?? json.regularMarketPreviousClose);
+  // 2. 優先精準取得 Yahoo 原生提供的漲跌與漲跌幅
+  let priceChange = 0;
+  let priceChangePct = 0;
 
-  // 若 API 未提供 previousClose，則往前搜尋不同日期的前一筆 K 線
-  if (!prevRealPrice || isNaN(prevRealPrice) || prevRealPrice <= 0) {
-    if (analysis.length >= 2) {
-      const lastDate = last.date;
-      const prevPoint = [...analysis].reverse().find(p => p.date !== lastDate);
-      if (prevPoint) {
-        prevRealPrice = Number(prevPoint.raw_close ?? prevPoint.close);
+  if (typeof json.regularMarketChange === "number" && typeof json.regularMarketChangePercent === "number") {
+    // 🎯 優先機制 1：直接使用 Yahoo API 回傳的精確即時漲跌金額與漲跌幅
+    priceChange = json.regularMarketChange;
+    priceChangePct = json.regularMarketChangePercent;
+  } else {
+    // 🎯 優先機制 2：使用現價減去 Yahoo 官方提供的昨收 (regularMarketPreviousClose)
+    const currentRealPrice = Number(json.regularMarketPrice ?? last.raw_close ?? last.close);
+    let prevRealPrice = Number(json.previousClose ?? json.regularMarketPreviousClose);
+
+    // 保底：若 API 完全無昨收，才從分析歷史倒數第二筆推算
+    if (!prevRealPrice || isNaN(prevRealPrice) || prevRealPrice <= 0) {
+      if (analysis.length >= 2) {
+        const lastDate = last.date;
+        const prevPoint = [...analysis].reverse().find(p => p.date !== lastDate);
+        if (prevPoint) {
+          prevRealPrice = Number(prevPoint.raw_close ?? prevPoint.close);
+        }
       }
     }
+
+    if (!prevRealPrice || isNaN(prevRealPrice)) prevRealPrice = currentRealPrice;
+
+    priceChange = currentRealPrice - prevRealPrice;
+    priceChangePct = prevRealPrice > 0 ? (priceChange / prevRealPrice) * 100 : 0;
   }
-
-  // 保底機制：若完全無法取得昨收，則令昨收等於現價 (即漲跌為 0)
-  if (!prevRealPrice || isNaN(prevRealPrice)) prevRealPrice = currentRealPrice;
-
-  // 3. 計算真實漲跌與漲跌幅
-  const priceChange = currentRealPrice - prevRealPrice;
-  const priceChangePct = prevRealPrice > 0 ? (priceChange / prevRealPrice) * 100 : 0;
 
   return { 
     sym: json.symbol, 
