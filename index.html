@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>樂活五線譜視覺化工具</title>
+  <link rel="stylesheet" href="styles.css">
   <style>
     :root {
       --bg: #f8fafc;
@@ -57,7 +58,6 @@
       font-size: 0.95rem;
     }
     
-    /* 勾選框專用樣式 */
     .checkbox-label {
       display: flex;
       align-items: center;
@@ -86,7 +86,6 @@
     button:hover { opacity: 0.9; }
     button:disabled { background: var(--muted); cursor: not-allowed; }
 
-    /* 💡 自動投資建議提示卡片 */
     .advice-card {
       padding: 12px 16px;
       border-radius: 8px;
@@ -111,7 +110,6 @@
       line-height: 1.45;
     }
 
-    /* 建議樣式主題配色 */
     .advice-neutral { background: #f1f5f9; border-color: #cbd5e1; color: #334155; }
     .advice-strong-buy { background: #f0fdf4; border-color: #86efac; color: #166534; }
     .advice-buy { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
@@ -250,7 +248,7 @@
         </select>
       </div>
 
-      <!-- 💡 顯示／隱藏樂活通道勾選框 (預設未勾選 / 關閉) -->
+      <!-- 顯示／隱藏樂活通道勾選框 -->
       <div class="form-group" style="margin-top: 15px;">
         <label class="checkbox-label">
           <input type="checkbox" id="toggleBand" class="showChannelCheckbox">
@@ -289,7 +287,7 @@
           <small id="rangeText" style="color:var(--muted);"></small>
         </div>
 
-        <!-- 🤖 量化自動投資建議面板 -->
+        <!-- 量化自動投資建議面板 -->
         <div id="adviceContainer" class="advice-card advice-neutral">
           <div class="advice-title" id="adviceTitle">💡 量化自動評估：等待載入標的...</div>
           <div class="advice-desc" id="adviceDesc">請輸入個股代號並點擊「載入個股數據」，系統將結合五線譜位階、R² 擬合度與法人籌碼自動計算策略建議。</div>
@@ -385,15 +383,6 @@
     </div>
   </div>
 
-  <script src="script.js"></script>
-  <!-- DOM 選擇器雙向容錯腳本 -->
-  <script>
-    document.addEventListener("DOMContentLoaded", function() {
-      window.toggleBandEl = document.getElementById("toggleBand") || document.getElementById("showChannelCheckbox");
-      if (window.toggleBandEl && !document.getElementById("showChannelCheckbox")) {
-        window.toggleBandEl.id = "toggleBand";
-      }
-    });
-  </script>
+  <script src="script_6.js"></script>
 </body>
 </html>
