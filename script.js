@@ -813,7 +813,7 @@ async function fetchLevelForWatchlist(symbol) {
   // 1. 取得最新一筆 K 線（當天）
   const last = analysis[analysis.length - 1];
   
-  // 🔹 修正重點 1：真實現價優先抓 raw_close，避免吃到被迴歸修正過的 close
+  // 🔹 真實現價優先抓 raw_close，避免吃到被迴歸修正過的 close
   const currentRealPrice = Number(last.raw_close !== undefined ? last.raw_close : last.close);
 
   // 2. 取前一交易日的真實收盤價
@@ -834,34 +834,9 @@ async function fetchLevelForWatchlist(symbol) {
   // 保底：若完全抓不到昨收，設為當前現價
   if (!prevRealPrice) prevRealPrice = currentRealPrice;
 
-  // 🔹 修正重點 2：用「真實現價」減去「真實昨收」
+  // 🔹 用「真實現價」減去「真實昨收」
   const priceChange = currentRealPrice - prevRealPrice;
   const priceChangePct = prevRealPrice > 0 ? (priceChange / prevRealPrice) * 100 : 0;
-
-  return { 
-    sym: json.symbol, 
-    last: last, 
-    change: priceChange,
-    changePct: priceChangePct,
-    name: json.name || getStockName(json.symbol) || "",
-    chip: chipData
-  };
-}
-
-  // C 防護方案：若還是找不到，嘗試取倒數第二筆 K 線
-  if (!prevClosePrice && analysis.length >= 2) {
-    prevClosePrice = Number(analysis[analysis.length - 2].raw_close || analysis[analysis.length - 2].close);
-  }
-
-  // 保底：避免分母為 0
-  if (!prevClosePrice) prevClosePrice = closePrice;
-
-  // 3. 正確計算相較於「昨收」的漲跌金額與漲跌幅
-  const priceChange = closePrice - prevClosePrice;
-  const priceChangePct = prevClosePrice > 0 ? (priceChange / prevClosePrice) * 100 : 0;
-
-  // Debug Log: 可打開 F12 Console 觀察抓到的昨收是否為 143.5
-  console.log(`[${json.symbol}] 現價:${closePrice}, 昨收:${prevClosePrice}, 漲跌:${priceChange}`);
 
   return { 
     sym: json.symbol, 
@@ -1059,7 +1034,7 @@ function bindEvents() {
         .slice(0, MAX_WATCHLIST_LIMIT);
 
       if (syms.length === 0) {
-        watchlistStatus.textContent = "⚠️️ 請輸入有效的股票代碼！";
+        watchlistStatus.textContent = "⚠ 請輸入有效的股票代碼！";
         watchlistStatus.style.color = "var(--red, #c94b4b)";
         return;
       }
@@ -1265,7 +1240,7 @@ function bindEvents() {
           watchlistStatus.style.color = "var(--blue)";
         }
         
-        btnClearWatchlist.textContent = "↩️ 復原清除清單";
+        btnClearWatchlist.textContent = "↩️️ 復原清除清單";
         btnClearWatchlist.style.backgroundColor = "#d9852b"; 
 
         if (watchlistSort) watchlistSort.value = "rankDesc";
