@@ -810,23 +810,44 @@ async function fetchLevelForWatchlist(symbol) {
   const chipData = chipRes.status === "fulfilled" ? chipRes.value : null;
   const analysis = buildAnalysis(json.rows, "linear", "3.5");
 
+  // 1. 取得最新一筆當天現價資料
   const last = analysis[analysis.length - 1];
-  const closePrice = last.raw_close || last.close;
+  const closePrice = Number(last.raw_close || last.close);
 
-  // 🔹 修正重點：優先使用 API 回傳的官方昨日收盤價 previousClose
-  // 若 API 無提供，則取 K 線資料中真正「日期不同」的前一交易日收盤價
-  let prevClosePrice = json.previousClose;
+  // 2. 精確尋找「前一交易日」的收盤價 (prevClosePrice)
+  let prevClosePrice = null;
 
-  if (!prevClosePrice) {
-    // 往前找第一筆「日期與今天不同」的資料作為昨收
-    const lastDate = last.date;
-    const prevDayData = [...analysis].reverse().find(p => p.date !== lastDate);
-    prevClosePrice = prevDayData ? (prevDayData.raw_close || prevDayData.close) : closePrice;
+  // A 方案：若 API 有直接回傳 official previousClose 且大於 0
+  if (json.previousClose && Number(json.previousClose) > 0) {
+    prevClosePrice = Number(json.previousClose);
   }
 
-  // 計算真正相較於「昨收」的漲跌金額與漲跌幅
+  // B 方案：從 K 線歷史數據中，由後往前找「第一筆日期與最新一筆不同」的資料
+  if (!prevClosePrice) {
+    const lastDateStr = String(last.date).split("T")[0]; // 只比對 YYYY-MM-DD
+    for (let i = analysis.length - 2; i >= 0; i--) {
+      const itemDateStr = String(analysis[i].date).split("T")[0];
+      if (itemDateStr !== lastDateStr) {
+        prevClosePrice = Number(analysis[i].raw_close || analysis[i].close);
+        break;
+      }
+    }
+  }
+
+  // C 防護方案：若還是找不到，嘗試取倒數第二筆 K 線
+  if (!prevClosePrice && analysis.length >= 2) {
+    prevClosePrice = Number(analysis[analysis.length - 2].raw_close || analysis[analysis.length - 2].close);
+  }
+
+  // 保底：避免分母為 0
+  if (!prevClosePrice) prevClosePrice = closePrice;
+
+  // 3. 正確計算相較於「昨收」的漲跌金額與漲跌幅
   const priceChange = closePrice - prevClosePrice;
   const priceChangePct = prevClosePrice > 0 ? (priceChange / prevClosePrice) * 100 : 0;
+
+  // Debug Log: 可打開 F12 Console 觀察抓到的昨收是否為 143.5
+  console.log(`[${json.symbol}] 現價:${closePrice}, 昨收:${prevClosePrice}, 漲跌:${priceChange}`);
 
   return { 
     sym: json.symbol, 
