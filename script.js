@@ -708,9 +708,12 @@ function render() {
       }
     }
 
-    if (closeText) {
+	if (closeText) {
       const curPrice = Number(last.raw_close ?? last.close);
-      const prevPoint = analysis.length >= 2 ? analysis[analysis.length - 2] : null;
+      
+      // 嘗試從歷史陣列中尋找「不同日期」的上一交易日收盤價
+      const lastDate = last.date;
+      const prevPoint = [...analysis].reverse().find(p => p.date !== lastDate);
       const prevPrice = prevPoint ? Number(prevPoint.raw_close ?? prevPoint.close) : curPrice;
       
       const diff = curPrice - prevPrice;
@@ -838,16 +841,17 @@ async function fetchLevelForWatchlist(symbol) {
 
   const last = analysis[analysis.length - 1];
 
-  let priceChange = 0;
+	let priceChange = 0;
   let priceChangePct = 0;
 
-  if (typeof json.regularMarketChange === "number" && typeof json.regularMarketChangePercent === "number") {
+  if (typeof json.regularMarketChange === "number" && typeof json.regularMarketChangePercent === "number" && json.regularMarketChange !== 0) {
     priceChange = json.regularMarketChange;
     priceChangePct = json.regularMarketChangePercent;
   } else {
     const currentRealPrice = Number(json.regularMarketPrice ?? last.raw_close ?? last.close);
     let prevRealPrice = Number(json.previousClose ?? json.regularMarketPreviousClose);
 
+    // 如果 Yahoo 沒有回傳 previousClose，從歷史 K 線搜尋「上一交易日」
     if (!prevRealPrice || isNaN(prevRealPrice) || prevRealPrice <= 0) {
       if (analysis.length >= 2) {
         const lastDate = last.date;
