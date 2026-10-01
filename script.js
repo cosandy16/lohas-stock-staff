@@ -56,7 +56,7 @@ let chart, chartTitle, btnAddToWatchlist, rangeText, zoneText, closeText, r2Text
 let peText, yieldText, watchlistInput, btnWatchlist, btnClearWatchlist, watchlistResult;
 let watchlistStatus, addWatchlistInput, btnAddWatchlistSingle, removeWatchlistSelect;
 let btnRemoveWatchlistSingle, btnExportWatchlist, btnImportWatchlist, watchlistSearch;
-let watchlistFilterZone, watchlistSort;
+let watchlistFilterZone, watchlistSort, btnBatchScan;
 
 let deletedWatchlistBackup = "";
 let scannedWatchlistCache = [];
@@ -96,6 +96,7 @@ function initDOMElements() {
 
   watchlistInput = document.querySelector("#watchlistInput");
   btnWatchlist = document.querySelector("#btnWatchlist");
+  btnBatchScan = document.querySelector("#btnBatchScan");
   btnClearWatchlist = document.querySelector("#btnClearWatchlist");
   watchlistResult = document.querySelector("#watchlistResult");
   watchlistStatus = document.querySelector("#watchlistStatus");
@@ -977,71 +978,78 @@ function bindEvents() {
   if (periodYears) periodYears.addEventListener("change", render);
   if (modelMode) modelMode.addEventListener("change", render);
 
-  if (btnWatchlist) {
-    btnWatchlist.addEventListener("click", async () => {
-      const rawInput = watchlistInput ? watchlistInput.value : "";
-      localStorage.setItem("lohas_watchlist", rawInput);
+  // 批量掃描通用處理邏輯
+  const handleBatchScan = async (targetBtn) => {
+    const rawInput = watchlistInput ? watchlistInput.value : "";
+    localStorage.setItem("lohas_watchlist", rawInput);
 
-      const syms = rawInput
-        .split(",")
-        .map(s => s.trim().toUpperCase())
-        .filter(Boolean)
-        .slice(0, MAX_WATCHLIST_LIMIT);
+    const syms = rawInput
+      .split(",")
+      .map(s => s.trim().toUpperCase())
+      .filter(Boolean)
+      .slice(0, MAX_WATCHLIST_LIMIT);
 
-      if (syms.length === 0) {
-        if (watchlistStatus) {
-          watchlistStatus.textContent = "⚠️ 請輸入有效的股票代碼！";
-          watchlistStatus.style.color = "var(--red, #c94b4b)";
-        }
-        return;
+    if (syms.length === 0) {
+      if (watchlistStatus) {
+        watchlistStatus.textContent = "⚠️ 請輸入有效的股票代碼！";
+        watchlistStatus.style.color = "var(--red, #c94b4b)";
       }
+      return;
+    }
 
-      if (watchlistResult) watchlistResult.innerHTML = "";
-      scannedWatchlistCache = [];
-      btnWatchlist.disabled = true;
+    if (watchlistResult) watchlistResult.innerHTML = "";
+    scannedWatchlistCache = [];
+    if (targetBtn) targetBtn.disabled = true;
+
+    if (watchlistStatus) {
+      watchlistStatus.textContent = `🔄 正在批量更新 ${syms.length} 支股票（分批讀取中）...`;
+      watchlistStatus.style.color = "var(--blue)";
+    }
+
+    try {
+      const results = await fetchInBatches(syms, 5);
+      let successCount = 0;
+      let failCount = 0;
+
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          scannedWatchlistCache.push(result.value);
+          successCount++;
+        } else {
+          failCount++;
+          console.error(`❌ 股票 ${syms[index]} 抓取失敗:`, result.reason);
+        }
+      });
+
+      updateWatchlistDisplay();
+      saveWatchlistCache();
 
       if (watchlistStatus) {
-        watchlistStatus.textContent = `🔄 正在批量更新 ${syms.length} 支股票（分批讀取中）...`;
-        watchlistStatus.style.color = "var(--blue)";
-      }
-
-      try {
-        const results = await fetchInBatches(syms, 5);
-        let successCount = 0;
-        let failCount = 0;
-
-        results.forEach((result, index) => {
-          if (result.status === "fulfilled") {
-            scannedWatchlistCache.push(result.value);
-            successCount++;
-          } else {
-            failCount++;
-            console.error(`❌ 股票 ${syms[index]} 抓取失敗:`, result.reason);
-          }
-        });
-
-        updateWatchlistDisplay();
-        saveWatchlistCache();
-
-        if (watchlistStatus) {
-          if (failCount === 0) {
-            watchlistStatus.textContent = `✅ 更新完成 (共 ${successCount} 檔)`;
-            watchlistStatus.style.color = "var(--blue)";
-          } else {
-            watchlistStatus.textContent = `⚠️ 更新完成：成功 ${successCount} 檔，失敗 ${failCount} 檔`;
-            watchlistStatus.style.color = "#d9852b";
-          }
+        if (failCount === 0) {
+          watchlistStatus.textContent = `✅ 更新完成 (共 ${successCount} 檔)`;
+          watchlistStatus.style.color = "var(--blue)";
+        } else {
+          watchlistStatus.textContent = `⚠️ 更新完成：成功 ${successCount} 檔，失敗 ${failCount} 檔`;
+          watchlistStatus.style.color = "#d9852b";
         }
-      } catch (err) {
-        console.error("批量更新過程發生未預期錯誤:", err);
-        if (watchlistStatus) {
-          watchlistStatus.textContent = "❌ 批量更新失敗，請檢查網路或 API 狀態。";
-          watchlistStatus.style.color = "var(--red, #c94b4b)";
-        }
-      } finally {
-        btnWatchlist.disabled = false;
       }
-    });
+    } catch (err) {
+      console.error("批量更新過程發生未預期錯誤:", err);
+      if (watchlistStatus) {
+        watchlistStatus.textContent = "❌ 批量更新失敗，請檢查網路或 API 狀態。";
+        watchlistStatus.style.color = "var(--red, #c94b4b)";
+      }
+    } finally {
+      if (targetBtn) targetBtn.disabled = false;
+    }
+  };
+
+  if (btnWatchlist) {
+    btnWatchlist.addEventListener("click", () => handleBatchScan(btnWatchlist));
+  }
+
+  if (btnBatchScan) {
+    btnBatchScan.addEventListener("click", () => handleBatchScan(btnBatchScan));
   }
 
   if (fetchSymbolBtn) {
