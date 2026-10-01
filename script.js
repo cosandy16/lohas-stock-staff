@@ -162,7 +162,7 @@ function updateAdvicePanel(zoneName, r2Value, chipData) {
       titleEl.innerHTML = "⚠️ 高位警訊：位階偏高 + 法人籌碼調節賣超";
       descEl.textContent = `股價已來到【${zoneName}】且接近高檔上緣，配合籌碼面上 ${chipDescText}，修正拉回風險較大，建議持股者分批獲利入袋，未持股者切勿追高。`;
     } else {
-      titleEl.innerHTML = "⚠️ 高位留意：樂觀區宜分批停利 / 謹慎追高";
+      titleEl.innerHTML = "⚠️️ 高位留意：樂觀區宜分批停利 / 謹慎追高";
       descEl.textContent = `股價已進入【${zoneName}】偏高區間。雖然籌碼尚未大舉拋售 (${chipDescText})，但統計上勝率偏低，建議調升停利點保護利潤。`;
     }
   } else if (isCheap) {
@@ -486,7 +486,8 @@ function regression(values) {
   const intercept = meanY - slope * meanX;
   const fitted = values.map(p => intercept + slope * p.x);
   const residuals = values.map((p, i) => p.y - fitted[i]);
-  const sd = Math.sqrt(residuals.reduce((s, r) => s + r ** 2, 0) / (n - 2 || 1));
+  // 🔹 補強防護：防止極端條件下除以 0
+  const sd = Math.sqrt(residuals.reduce((s, r) => s + r ** 2, 0) / Math.max(1, n - 2));
   const ssTot = values.reduce((s, p) => s + (p.y - meanY) ** 2, 0);
   const ssRes = residuals.reduce((s, r) => s + r ** 2, 0);
   const r2 = ssTot === 0 ? 1 : Math.max(0, 1 - ssRes / ssTot);
@@ -677,8 +678,8 @@ function renderChart(analysis) {
     };
 
     const hideTooltip = () => {
-      tooltipLine.style.display = "none";
-      chartTooltip.style.display = "none";
+      if (tooltipLine) tooltipLine.style.display = "none";
+      if (chartTooltip) chartTooltip.style.display = "none";
     };
 
     svg.addEventListener("mousemove", handleMove);
@@ -710,7 +711,7 @@ function render() {
       }
     }
 
-    // 🔹 修正：主頁面現價區塊（圖二）同步顯示漲跌與漲跌幅
+    // 主頁面現價區塊同步顯示漲跌與漲跌幅
     if (closeText) {
       const curPrice = Number(last.raw_close ?? last.close);
       const prevPoint = analysis.length >= 2 ? analysis[analysis.length - 2] : null;
@@ -815,7 +816,6 @@ async function loadMainChipData(symbol) {
   }
 }
 
-// 🔹 修正：正確抓取未還原的真實當日前一筆昨收 (previousClose)，解決漲跌算錯問題
 async function fetchLevelForWatchlist(symbol) {
   let finalSym = symbol.trim().toUpperCase();
   if (!finalSym.includes(".") && /^\d+$/.test(finalSym)) finalSym += ".TW";
@@ -974,7 +974,6 @@ function updateWatchlistDisplay() {
     const displayName = item.name || getStockName(item.sym) || "";
     const badge = getActionBadge(priceZone(item.last), item.chip, item.last.r2);
 
-    // 🔹 修正：計算當日漲跌格式化字串與顏色 (含平盤處理)
     const changeNum = item.change ?? 0;
     const changePctNum = item.changePct ?? 0;
     
@@ -1043,15 +1042,19 @@ function updateWatchlistDisplay() {
 // 10. 事件綁定統一管理
 // ------------------------------------------
 function bindEvents() {
-  // 🔹 綁定 Checkbox / Toggle 切換事件 (相容 #toggleBand 與 #showChannelCheckbox)
   const handleBandToggle = () => render();
 
   if (showChannelCheckbox) {
     showChannelCheckbox.addEventListener("change", handleBandToggle);
   }
+  
+  // 🔹 修正：若 toggleBand 為 checkbox 則僅綁定 change，避免重複觸發 render()
   if (toggleBand) {
-    toggleBand.addEventListener("change", handleBandToggle);
-    toggleBand.addEventListener("click", handleBandToggle);
+    if (toggleBand.type === "checkbox") {
+      toggleBand.addEventListener("change", handleBandToggle);
+    } else {
+      toggleBand.addEventListener("click", handleBandToggle);
+    }
   }
 
   if (periodYears) periodYears.addEventListener("change", render);
@@ -1069,8 +1072,10 @@ function bindEvents() {
         .slice(0, MAX_WATCHLIST_LIMIT);
 
       if (syms.length === 0) {
-        watchlistStatus.textContent = "⚠ 請輸入有效的股票代碼！";
-        watchlistStatus.style.color = "var(--red, #c94b4b)";
+        if (watchlistStatus) {
+          watchlistStatus.textContent = "⚠ 請輸入有效的股票代碼！";
+          watchlistStatus.style.color = "var(--red, #c94b4b)";
+        }
         return;
       }
 
@@ -1078,8 +1083,10 @@ function bindEvents() {
       scannedWatchlistCache = [];
       btnWatchlist.disabled = true;
 
-      watchlistStatus.textContent = `🔄 正在批量更新 ${syms.length} 支股票（分批讀取中）...`;
-      watchlistStatus.style.color = "var(--blue)";
+      if (watchlistStatus) {
+        watchlistStatus.textContent = `🔄 正在批量更新 ${syms.length} 支股票（分批讀取中）...`;
+        watchlistStatus.style.color = "var(--blue)";
+      }
 
       try {
         const results = await fetchInBatches(syms, 5);
@@ -1099,17 +1106,21 @@ function bindEvents() {
         updateWatchlistDisplay();
         saveWatchlistCache();
 
-        if (failCount === 0) {
-          watchlistStatus.textContent = `✅ 更新完成 (共 ${successCount} 檔)`;
-          watchlistStatus.style.color = "var(--blue)";
-        } else {
-          watchlistStatus.textContent = `⚠️ 更新完成：成功 ${successCount} 檔，失敗 ${failCount} 檔`;
-          watchlistStatus.style.color = "#d9852b";
+        if (watchlistStatus) {
+          if (failCount === 0) {
+            watchlistStatus.textContent = `✅ 更新完成 (共 ${successCount} 檔)`;
+            watchlistStatus.style.color = "var(--blue)";
+          } else {
+            watchlistStatus.textContent = `⚠️ 更新完成：成功 ${successCount} 檔，失敗 ${failCount} 檔`;
+            watchlistStatus.style.color = "#d9852b";
+          }
         }
       } catch (err) {
         console.error("批量更新過程發生未預期錯誤:", err);
-        watchlistStatus.textContent = "❌ 批量更新失敗，請檢查網路或 API 狀態。";
-        watchlistStatus.style.color = "var(--red, #c94b4b)";
+        if (watchlistStatus) {
+          watchlistStatus.textContent = "❌ 批量更新失敗，請檢查網路或 API 狀態。";
+          watchlistStatus.style.color = "var(--red, #c94b4b)";
+        }
       } finally {
         btnWatchlist.disabled = false;
       }
