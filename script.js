@@ -811,11 +811,20 @@ async function fetchLevelForWatchlist(symbol) {
   const analysis = buildAnalysis(json.rows, "linear", "3.5");
 
   const last = analysis[analysis.length - 1];
-  const prev = analysis.length > 1 ? analysis[analysis.length - 2] : null;
-
-  // 計算今天相較昨天的漲跌金額與漲跌幅
   const closePrice = last.raw_close || last.close;
-  const prevClosePrice = prev ? (prev.raw_close || prev.close) : closePrice;
+
+  // 🔹 修正重點：優先使用 API 回傳的官方昨日收盤價 previousClose
+  // 若 API 無提供，則取 K 線資料中真正「日期不同」的前一交易日收盤價
+  let prevClosePrice = json.previousClose;
+
+  if (!prevClosePrice) {
+    // 往前找第一筆「日期與今天不同」的資料作為昨收
+    const lastDate = last.date;
+    const prevDayData = [...analysis].reverse().find(p => p.date !== lastDate);
+    prevClosePrice = prevDayData ? (prevDayData.raw_close || prevDayData.close) : closePrice;
+  }
+
+  // 計算真正相較於「昨收」的漲跌金額與漲跌幅
   const priceChange = closePrice - prevClosePrice;
   const priceChangePct = prevClosePrice > 0 ? (priceChange / prevClosePrice) * 100 : 0;
 
