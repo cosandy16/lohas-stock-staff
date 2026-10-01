@@ -819,7 +819,6 @@ async function fetchLevelForWatchlist(symbol) {
   const cleanCode = finalSym.replace(".TW", "").replace(".TWO", "");
   const mkt = finalSym.includes(".TWO") ? "two" : (finalSym.includes(".TW") ? "tw" : "us");
   
-  // 💡 修正：動態讀取 UI 選取的年限與模式，不硬編碼
   const selectedYears = periodYears ? periodYears.value : "3.5";
   const selectedMode = modelMode ? modelMode.value : "linear";
   const p = new URLSearchParams({ symbol: cleanCode, market: mkt, years: selectedYears });
@@ -1308,7 +1307,7 @@ function bindEvents() {
       e.preventDefault();
       const currentText = watchlistInput.value.trim();
       if (!currentText) {
-        if (watchlistStatus) watchlistStatus.textContent = "⚠️️ 目前清單是空的，無法複製喔！";
+        if (watchlistStatus) watchlistStatus.textContent = "⚠ 目前清單是空的，無法複製喔！";
         return;
       }
       
