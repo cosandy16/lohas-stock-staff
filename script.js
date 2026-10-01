@@ -51,7 +51,7 @@ const STOCK_FUNDAMENTALS = {
 // 2. DOM 元素選取與全域變數
 // ------------------------------------------
 let csvInput, market, symbolInput, fetchSymbolBtn, fetchStatus, periodYears, modelMode;
-let showChannelCheckbox, toggleBand; // 🔹 支援 #showChannelCheckbox 與 #toggleBand 雙 DOM 相容
+let showChannelCheckbox, toggleBand; 
 let chart, chartTitle, btnAddToWatchlist, rangeText, zoneText, closeText, r2Text, levelsTable;
 let peText, yieldText, watchlistInput, btnWatchlist, btnClearWatchlist, watchlistResult;
 let watchlistStatus, addWatchlistInput, btnAddWatchlistSingle, removeWatchlistSelect;
@@ -78,7 +78,6 @@ function initDOMElements() {
   periodYears = document.querySelector("#periodYears");
   modelMode = document.querySelector("#modelMode");
   
-  // 🔹 抓取「顯示樂活通道」相關控制項（支援 #toggleBand 與 #showChannelCheckbox）
   toggleBand = document.querySelector("#toggleBand");
   showChannelCheckbox = document.querySelector("#showChannelCheckbox");
 
@@ -114,7 +113,6 @@ function initDOMElements() {
   watchlistSort = document.querySelector("#watchlistSort");
 }
 
-// 判斷當前樂活通道開關狀態 (相容 #toggleBand 與 #showChannelCheckbox)
 function isBandChannelActive() {
   if (toggleBand) {
     if (toggleBand.type === "checkbox") return toggleBand.checked;
@@ -162,7 +160,7 @@ function updateAdvicePanel(zoneName, r2Value, chipData) {
       titleEl.innerHTML = "⚠️ 高位警訊：位階偏高 + 法人籌碼調節賣超";
       descEl.textContent = `股價已來到【${zoneName}】且接近高檔上緣，配合籌碼面上 ${chipDescText}，修正拉回風險較大，建議持股者分批獲利入袋，未持股者切勿追高。`;
     } else {
-      titleEl.innerHTML = "⚠️️ 高位留意：樂觀區宜分批停利 / 謹慎追高";
+      titleEl.innerHTML = "⚠ 高位留意：樂觀區宜分批停利 / 謹慎追高";
       descEl.textContent = `股價已進入【${zoneName}】偏高區間。雖然籌碼尚未大舉拋售 (${chipDescText})，但統計上勝率偏低，建議調升停利點保護利潤。`;
     }
   } else if (isCheap) {
@@ -407,7 +405,6 @@ function updateRemoveSelect() {
 // 6. 迴歸分析與樂活通道 (Band Channel / ATR) 計算
 // ------------------------------------------
 
-// 🔹 樂活通道關鍵：ATR (Average True Range) 計算
 function calculateATR(data, period = 14) {
   if (!data || data.length === 0) return [];
   
@@ -439,7 +436,6 @@ function calculateATR(data, period = 14) {
   return atr;
 }
 
-// 🔹 樂活通道關鍵：20SMA 中軌與上下軌 (20SMA ± 2 * ATR) 計算
 function calculateBandChannel(data, smaPeriod = 20, atrPeriod = 14, multiplier = 2) {
   const atrValues = calculateATR(data, atrPeriod);
   
@@ -470,6 +466,10 @@ function calculateBandChannel(data, smaPeriod = 20, atrPeriod = 14, multiplier =
 
 function regression(values) {
   const n = values.length;
+  if (n < 2) {
+    return { intercept: values[0]?.y || 0, slope: 0, sd: 0, r2: 1 };
+  }
+
   let sumX = 0, sumY = 0;
   for (let i = 0; i < n; i++) {
     sumX += values[i].x;
@@ -486,7 +486,7 @@ function regression(values) {
   const intercept = meanY - slope * meanX;
   const fitted = values.map(p => intercept + slope * p.x);
   const residuals = values.map((p, i) => p.y - fitted[i]);
-  // 🔹 補強防護：防止極端條件下除以 0
+  
   const sd = Math.sqrt(residuals.reduce((s, r) => s + r ** 2, 0) / Math.max(1, n - 2));
   const ssTot = values.reduce((s, p) => s + (p.y - meanY) ** 2, 0);
   const ssRes = residuals.reduce((s, r) => s + r ** 2, 0);
@@ -524,7 +524,6 @@ function buildAnalysis(data, currentMode = (modelMode ? modelMode.value : "linea
       minus1: conv(midRaw - fit.sd),
       minus2: conv(midRaw - fit.sd * 2),
       r2: fit.r2,
-      // 疊加樂活通道指標
       bandMid: bandData[idx].bandMid,
       bandUpper: bandData[idx].bandUpper,
       bandLower: bandData[idx].bandLower
@@ -573,13 +572,11 @@ function renderChart(analysis) {
     }
   });
 
-  // 🔹 預設五線譜軌道
   const fiveLinesHtml = levelDefs.map(l => {
     const pointsStr = analysis.map((p, i) => `${x(i)},${y(p[l.key])}`).join(" ");
     return `<polyline points="${pointsStr}" fill="none" stroke="${l.color}" stroke-width="${l.key === 'mid' ? 2.5 : 1.2}" opacity="0.75" />`;
   }).join("");
 
-  // 🔹 根據 Checkbox / Toggle 開關控制是否繪製樂活通道 (Band Channel)
   const isBandActive = isBandChannelActive();
   let bandChannelHtml = "";
 
@@ -711,7 +708,6 @@ function render() {
       }
     }
 
-    // 主頁面現價區塊同步顯示漲跌與漲跌幅
     if (closeText) {
       const curPrice = Number(last.raw_close ?? last.close);
       const prevPoint = analysis.length >= 2 ? analysis[analysis.length - 2] : null;
@@ -721,12 +717,12 @@ function render() {
       const diffPct = prevPrice > 0 ? (diff / prevPrice) * 100 : 0;
       
       let diffSign = "";
-      let diffColor = "#64748b"; // 平盤灰色
+      let diffColor = "#64748b";
       if (diff > 0) {
         diffSign = "+";
-        diffColor = "#c94b4b"; // 漲 - 紅色
+        diffColor = "#c94b4b";
       } else if (diff < 0) {
-        diffColor = "#1f8a63"; // 跌 - 綠色
+        diffColor = "#1f8a63";
       }
 
       closeText.innerHTML = `
@@ -822,7 +818,11 @@ async function fetchLevelForWatchlist(symbol) {
   
   const cleanCode = finalSym.replace(".TW", "").replace(".TWO", "");
   const mkt = finalSym.includes(".TWO") ? "two" : (finalSym.includes(".TW") ? "tw" : "us");
-  const p = new URLSearchParams({ symbol: cleanCode, market: mkt, years: "3.5" });
+  
+  // 💡 修正：動態讀取 UI 選取的年限與模式，不硬編碼
+  const selectedYears = periodYears ? periodYears.value : "3.5";
+  const selectedMode = modelMode ? modelMode.value : "linear";
+  const p = new URLSearchParams({ symbol: cleanCode, market: mkt, years: selectedYears });
 
   const [yahooRes, chipRes] = await Promise.allSettled([
     fetch(`/api/yahoo?${p.toString()}`).then(r => r.ok ? r.json() : Promise.reject(r)),
@@ -835,25 +835,20 @@ async function fetchLevelForWatchlist(symbol) {
 
   const json = yahooRes.value;
   const chipData = chipRes.status === "fulfilled" ? chipRes.value : null;
-  const analysis = buildAnalysis(json.rows, "linear", "3.5");
+  const analysis = buildAnalysis(json.rows, selectedMode, selectedYears);
 
-  // 1. 取得迴歸五線譜分析之最後一筆數據
   const last = analysis[analysis.length - 1];
 
-  // 2. 優先精準取得 Yahoo 原生提供的漲跌與漲跌幅
   let priceChange = 0;
   let priceChangePct = 0;
 
   if (typeof json.regularMarketChange === "number" && typeof json.regularMarketChangePercent === "number") {
-    // 🎯 優先機制 1：直接使用 Yahoo API 回傳的精確即時漲跌金額與漲跌幅
     priceChange = json.regularMarketChange;
     priceChangePct = json.regularMarketChangePercent;
   } else {
-    // 🎯 優先機制 2：使用現價減去 Yahoo 官方提供的昨收 (regularMarketPreviousClose)
     const currentRealPrice = Number(json.regularMarketPrice ?? last.raw_close ?? last.close);
     let prevRealPrice = Number(json.previousClose ?? json.regularMarketPreviousClose);
 
-    // 保底：若 API 完全無昨收，才從分析歷史倒數第二筆推算
     if (!prevRealPrice || isNaN(prevRealPrice) || prevRealPrice <= 0) {
       if (analysis.length >= 2) {
         const lastDate = last.date;
@@ -983,13 +978,13 @@ function updateWatchlistDisplay() {
     const changeNum = item.change ?? 0;
     const changePctNum = item.changePct ?? 0;
     
-    let changeColor = "#64748b"; // 平盤灰色
+    let changeColor = "#64748b";
     let changeSign = "";
     if (changeNum > 0) {
-      changeColor = "#c94b4b"; // 漲 - 紅色
+      changeColor = "#c94b4b";
       changeSign = "+";
     } else if (changeNum < 0) {
-      changeColor = "#1f8a63"; // 跌 - 綠色
+      changeColor = "#1f8a63";
       changeSign = "";
     }
 
@@ -1054,7 +1049,6 @@ function bindEvents() {
     showChannelCheckbox.addEventListener("change", handleBandToggle);
   }
   
-  // 🔹 修正：若 toggleBand 為 checkbox 則僅綁定 change，避免重複觸發 render()
   if (toggleBand) {
     if (toggleBand.type === "checkbox") {
       toggleBand.addEventListener("change", handleBandToggle);
@@ -1314,7 +1308,7 @@ function bindEvents() {
       e.preventDefault();
       const currentText = watchlistInput.value.trim();
       if (!currentText) {
-        if (watchlistStatus) watchlistStatus.textContent = "⚠️ 目前清單是空的，無法複製喔！";
+        if (watchlistStatus) watchlistStatus.textContent = "⚠️️ 目前清單是空的，無法複製喔！";
         return;
       }
       
