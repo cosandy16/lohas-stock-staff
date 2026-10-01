@@ -709,7 +709,33 @@ function render() {
         nearestEl.style.color = nearest.diff >= 0 ? "#c94b4b" : "#1f8a63";
       }
     }
-    if (closeText) closeText.textContent = formatPrice(last.raw_close || last.close);
+
+    // 🔹 修正：主頁面現價區塊（圖二）同步顯示漲跌與漲跌幅
+    if (closeText) {
+      const curPrice = Number(last.raw_close ?? last.close);
+      const prevPoint = analysis.length >= 2 ? analysis[analysis.length - 2] : null;
+      const prevPrice = prevPoint ? Number(prevPoint.raw_close ?? prevPoint.close) : curPrice;
+      
+      const diff = curPrice - prevPrice;
+      const diffPct = prevPrice > 0 ? (diff / prevPrice) * 100 : 0;
+      
+      let diffSign = "";
+      let diffColor = "#64748b"; // 平盤灰色
+      if (diff > 0) {
+        diffSign = "+";
+        diffColor = "#c94b4b"; // 漲 - 紅色
+      } else if (diff < 0) {
+        diffColor = "#1f8a63"; // 跌 - 綠色
+      }
+
+      closeText.innerHTML = `
+        <div style="font-size: 1.5rem; font-weight: bold;">${formatPrice(curPrice)}</div>
+        <div style="font-size: 0.85rem; color: ${diffColor}; font-weight: bold; margin-top: 2px;">
+          ${diffSign}${diff.toFixed(2)} (${diffSign}${diffPct.toFixed(2)}%)
+        </div>
+      `;
+    }
+
     if (r2Text) r2Text.textContent = last.r2.toFixed(3);
     if (rangeText) rangeText.textContent = getPriceRangeDesc(last);
     
@@ -789,6 +815,7 @@ async function loadMainChipData(symbol) {
   }
 }
 
+// 🔹 修正：正確抓取未還原的真實當日前一筆昨收 (previousClose)，解決漲跌算錯問題
 async function fetchLevelForWatchlist(symbol) {
   let finalSym = symbol.trim().toUpperCase();
   if (!finalSym.includes(".") && /^\d+$/.test(finalSym)) finalSym += ".TW";
@@ -810,31 +837,30 @@ async function fetchLevelForWatchlist(symbol) {
   const chipData = chipRes.status === "fulfilled" ? chipRes.value : null;
   const analysis = buildAnalysis(json.rows, "linear", "3.5");
 
-  // 1. 取得最新一筆 K 線（當天）
+  // 1. 取得最新一筆 K 線 (當天)
   const last = analysis[analysis.length - 1];
   
-  // 🔹 真實現價優先抓 raw_close，避免吃到被迴歸修正過的 close
-  const currentRealPrice = Number(last.raw_close !== undefined ? last.raw_close : last.close);
+  // 優先採用 Yahoo API 帶出的真實最新價 (regularMarketPrice) 或原始 K 線 raw_close
+  const currentRealPrice = Number(json.regularMarketPrice ?? last.raw_close ?? last.close);
 
-  // 2. 取前一交易日的真實收盤價
-  let prevRealPrice = null;
+  // 2. 優先取得真實前一交易日收盤價 (previousClose)
+  let prevRealPrice = Number(json.previousClose ?? json.regularMarketPreviousClose);
 
-  // 優先看 API 是否有帶 official previousClose
-  if (json.previousClose && Number(json.previousClose) > 0) {
-    prevRealPrice = Number(json.previousClose);
-  } else if (analysis.length >= 2) {
-    // 從倒數第二筆往前找不同日期的 K 線
-    const lastDate = last.date;
-    const prevPoint = [...analysis].reverse().find(p => p.date !== lastDate);
-    if (prevPoint) {
-      prevRealPrice = Number(prevPoint.raw_close !== undefined ? prevPoint.raw_close : prevPoint.close);
+  // 若 API 未提供 previousClose，則往前搜尋不同日期的前一筆 K 線
+  if (!prevRealPrice || isNaN(prevRealPrice) || prevRealPrice <= 0) {
+    if (analysis.length >= 2) {
+      const lastDate = last.date;
+      const prevPoint = [...analysis].reverse().find(p => p.date !== lastDate);
+      if (prevPoint) {
+        prevRealPrice = Number(prevPoint.raw_close ?? prevPoint.close);
+      }
     }
   }
 
-  // 保底：若完全抓不到昨收，設為當前現價
-  if (!prevRealPrice) prevRealPrice = currentRealPrice;
+  // 保底機制：若完全無法取得昨收，則令昨收等於現價 (即漲跌為 0)
+  if (!prevRealPrice || isNaN(prevRealPrice)) prevRealPrice = currentRealPrice;
 
-  // 🔹 用「真實現價」減去「真實昨收」
+  // 3. 計算真實漲跌與漲跌幅
   const priceChange = currentRealPrice - prevRealPrice;
   const priceChangePct = prevRealPrice > 0 ? (priceChange / prevRealPrice) * 100 : 0;
 
@@ -948,11 +974,20 @@ function updateWatchlistDisplay() {
     const displayName = item.name || getStockName(item.sym) || "";
     const badge = getActionBadge(priceZone(item.last), item.chip, item.last.r2);
 
-    // 計算當日漲跌格式化字串與顏色
-    const changeNum = item.change || 0;
-    const changePctNum = item.changePct || 0;
-    const changeColor = changeNum > 0 ? "#c94b4b" : (changeNum < 0 ? "#1f8a63" : "#64748b");
-    const changeSign = changeNum > 0 ? "+" : "";
+    // 🔹 修正：計算當日漲跌格式化字串與顏色 (含平盤處理)
+    const changeNum = item.change ?? 0;
+    const changePctNum = item.changePct ?? 0;
+    
+    let changeColor = "#64748b"; // 平盤灰色
+    let changeSign = "";
+    if (changeNum > 0) {
+      changeColor = "#c94b4b"; // 漲 - 紅色
+      changeSign = "+";
+    } else if (changeNum < 0) {
+      changeColor = "#1f8a63"; // 跌 - 綠色
+      changeSign = "";
+    }
+
     const changeText = `${changeSign}${changeNum.toFixed(2)} (${changeSign}${changePctNum.toFixed(2)}%)`;
 
     card.innerHTML = `
@@ -1240,7 +1275,7 @@ function bindEvents() {
           watchlistStatus.style.color = "var(--blue)";
         }
         
-        btnClearWatchlist.textContent = "↩️️ 復原清除清單";
+        btnClearWatchlist.textContent = "↩ 復原清除清單";
         btnClearWatchlist.style.backgroundColor = "#d9852b"; 
 
         if (watchlistSort) watchlistSort.value = "rankDesc";
