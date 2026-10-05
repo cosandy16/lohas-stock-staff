@@ -307,15 +307,15 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
                 raise ValueError("Yahoo Finance 回傳空資料")
 
             result = chart_data[0]
-            timestamps = result.get("timestamp", []) or []
+            timestamps = result.get("timestamp", [])
             meta = result.get("meta", {})
             regular_market_price = meta.get("regularMarketPrice")
 
             quote_indicators = result.get("indicators", {}).get("quote", [{}])[0]
-            raw_closes = quote_indicators.get("close", []) or []
+            raw_closes = quote_indicators.get("close", [])
 
             adj_indicators = result.get("indicators", {}).get("adjclose", [{}])[0]
-            adj_closes = adj_indicators.get("adjclose", []) or []
+            adj_closes = adj_indicators.get("adjclose", [])
 
             if not adj_closes:
                 adj_closes = raw_closes
@@ -444,7 +444,7 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     update_stock_names_from_api()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"🚀 Stock Server Started on Port {PORT}")
+    print(f"🚀 Render Cloud Stock Server Started on Port {PORT}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
