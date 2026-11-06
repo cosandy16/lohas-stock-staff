@@ -689,9 +689,11 @@ function render() {
     const last = analysis[analysis.length - 1];
     const prev = analysis.length >= 2 ? analysis[analysis.length - 2] : last;
     
-    // 計算今日漲跌與漲跌幅
-    const priceDiff = last.close - prev.close;
-    const changePct = prev.close !== 0 ? (priceDiff / prev.close) * 100 : 0;
+    // 💡 修正：優先採用未還原的真實收盤價 (raw_close) 計算漲跌價與漲跌幅 %
+    const lastRaw = last.raw_close || last.close;
+    const prevRaw = prev.raw_close || prev.close;
+    const priceDiff = lastRaw - prevRaw;
+    const changePct = prevRaw !== 0 ? (priceDiff / prevRaw) * 100 : 0;
     const signStr = priceDiff > 0 ? "+" : "";
     const changeColor = priceDiff > 0 ? "#c94b4b" : (priceDiff < 0 ? "#12614a" : "var(--ink)");
 
@@ -710,7 +712,7 @@ function render() {
     }
     
     if (closeText) {
-      closeText.innerHTML = `${formatPrice(last.raw_close || last.close)} <span style="font-size:0.82rem; font-weight:bold; color:${changeColor}; margin-left:4px;">(${signStr}${priceDiff.toFixed(2)} / ${signStr}${changePct.toFixed(2)}%)</span>`;
+      closeText.innerHTML = `${formatPrice(lastRaw)} <span style="font-size:0.82rem; font-weight:bold; color:${changeColor}; margin-left:4px;">(${signStr}${priceDiff.toFixed(2)} / ${signStr}${changePct.toFixed(2)}%)</span>`;
     }
 
     if (r2Text) r2Text.textContent = last.r2.toFixed(3);
@@ -909,10 +911,11 @@ function updateWatchlistDisplay() {
     const peDisp = fun.eps > 0 ? `${(item.last.close / fun.eps).toFixed(1)}x` : "N/A";
     const yieldDisp = `${((fun.dividend / item.last.close) * 100).toFixed(1)}%`;
 
-    // 💡 計算個股卡片的今日漲跌幅
-    const prevClose = item.prev ? item.prev.close : item.last.close;
-    const diff = item.last.close - prevClose;
-    const pct = prevClose !== 0 ? (diff / prevClose) * 100 : 0;
+    // 💡 修正：優先採用未還原真實收盤價 (raw_close) 計算卡片今日漲跌幅
+    const lastRaw = item.last.raw_close || item.last.close;
+    const prevRaw = item.prev ? (item.prev.raw_close || item.prev.close) : lastRaw;
+    const diff = lastRaw - prevRaw;
+    const pct = prevRaw !== 0 ? (diff / prevRaw) * 100 : 0;
     const sStr = diff > 0 ? "+" : "";
     const cColor = diff > 0 ? "#c94b4b" : (diff < 0 ? "#12614a" : "#333");
     const changeDisp = `<span style="color:${cColor}; font-weight:bold;">${sStr}${diff.toFixed(2)} (${sStr}${pct.toFixed(2)}%)</span>`;
@@ -934,7 +937,7 @@ function updateWatchlistDisplay() {
       <div>
         <strong>${item.sym}</strong>${displayName ? `<span style="color:#555; font-size:0.85em; margin-left:6px; font-weight:600;">${displayName}</span>` : ""}<br>
         <small style="color:${smallTextColor}; display: block; margin-top: 4px; line-height: 1.5;">
-          <span style="white-space: nowrap;">現價: ${formatPrice(item.last.raw_close || item.last.close)}</span> 
+          <span style="white-space: nowrap;">現價: ${formatPrice(lastRaw)}</span> 
           <span style="white-space: nowrap;">今日: ${changeDisp}</span>
           <br>
           <span style="white-space: nowrap;">PE: ${peDisp}</span> | 
