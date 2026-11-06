@@ -1,3 +1,6 @@
+# ==========================================
+# 樂活通道 / 均線通道 / 五線譜 / 股票觀察清單 後端伺服器 (server.py)
+# ==========================================
 import datetime
 import json
 import mimetypes
@@ -30,7 +33,6 @@ def update_stock_names_from_api():
     global STOCK_NAME_MAP
     new_map = {}
     
-    # 1. 證交所 (上市股票 & 全體 ETF)
     twse_urls = [
         "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL",
         "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
@@ -49,7 +51,6 @@ def update_stock_names_from_api():
         except Exception as e:
             print(f"⚠️ [TWSE API] 下載上市清單失敗 ({twse_url}): {e}")
 
-    # 2. 櫃買中心 (上櫃股票 & 上櫃 ETF / 債券 ETF)
     tpex_urls = [
         "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes",
         "https://www.tpex.org.tw/openapi/v1/mops_all_01",
@@ -73,7 +74,6 @@ def update_stock_names_from_api():
         print(f"🎉 全局股票名稱字典更新完成，總計 {len(STOCK_NAME_MAP)} 檔標的名稱 (含上市/上櫃/ETF)")
 
 def fetch_single_tpex_name(symbol_code):
-    """備援：若字典漏掉，即時發送 request 向櫃買中心查詢單檔上櫃股票中文名"""
     try:
         url = f"https://www.tpex.org.tw/web/stock/aftertrading/otc_quotes_summary1/stk_summary_result.php?l=zh-tw&stkno={symbol_code}"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
@@ -86,9 +86,6 @@ def fetch_single_tpex_name(symbol_code):
         pass
     return None
 
-# ---------------------------------------------------------
-# 工具函式
-# ---------------------------------------------------------
 def parse_number(value):
     cleaned = str(value).replace(",", "").strip()
     if cleaned in {"", "--", "X", "除權息", "None", "null"}:
@@ -247,20 +244,14 @@ def fetch_tpex_openapi(symbol_code):
 
 def fetch_chip_data(raw_symbol):
     symbol_code = raw_symbol.split(".")[0].strip().upper()
-    print(f"📡 正在查詢 [{symbol_code}] 最新三大法人籌碼...")
+    print(f"📡 查詢 [{symbol_code}] 最新三大法人籌碼...")
 
     res = fetch_finmind_chip(symbol_code)
-    if res:
-        return res
-
+    if res: return res
     res = fetch_twse_openapi(symbol_code)
-    if res:
-        return res
-
+    if res: return res
     res = fetch_tpex_openapi(symbol_code)
-    if res:
-        return res
-
+    if res: return res
     return None
 
 # ---------------------------------------------------------
@@ -310,6 +301,7 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             timestamps = result.get("timestamp", [])
             meta = result.get("meta", {})
             regular_market_price = meta.get("regularMarketPrice")
+            previous_close = meta.get("chartPreviousClose") or meta.get("previousClose")
 
             quote_indicators = result.get("indicators", {}).get("quote", [{}])[0]
             raw_closes = quote_indicators.get("close", [])
@@ -336,29 +328,33 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
                             "raw_close": float(valid_raw),
                         })
 
+            # 💡 確保歷史最後一筆的 raw_close 與 close 擁有正確的未還原價與昨日收盤
             if rows and regular_market_price is not None:
                 latest_raw = float(regular_market_price)
+                last_adj = rows[-1]["close"]
                 last_raw = rows[-1]["raw_close"]
 
                 if last_raw > 0:
-                    ratio = latest_raw / last_raw
+                    ratio = last_adj / last_raw
+                    # 若倒數第二筆存在，利用 previous_close 補齊真實未還原昨收
+                    if len(rows) >= 2 and previous_close:
+                        rows[-2]["raw_close"] = float(previous_close)
+                    
                     rows[-1]["raw_close"] = latest_raw
-                    rows[-1]["close"] = round(rows[-1]["close"] * ratio, 2)
+                    # 維持五線譜回歸計算使用等比例的還原價
+                    rows[-1]["close"] = round(latest_raw * ratio, 2)
 
             if not rows:
                 raise ValueError("解析後無有效收盤價歷史紀錄")
 
-            # 優先使用 OpenData 全局中文名稱字典
             clean_code = yahoo_symbol.split(".")[0].strip()
             raw_stock_name = STOCK_NAME_MAP.get(clean_code)
             
-            # 若字典仍查無，對上櫃股票 (.TWO) 發動動態備援查詢
             if not raw_stock_name and ".TWO" in yahoo_symbol:
                 raw_stock_name = fetch_single_tpex_name(clean_code)
                 if raw_stock_name:
                     STOCK_NAME_MAP[clean_code] = raw_stock_name
 
-            # 最後防線才使用 Yahoo 回傳名稱
             if not raw_stock_name:
                 raw_stock_name = meta.get("shortName") or meta.get("longName") or clean_code
 
