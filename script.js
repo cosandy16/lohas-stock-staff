@@ -4,8 +4,9 @@
 
 const MAX_WATCHLIST_LIMIT = 40;
 
-// 全域暫存當前標的籌碼資料，供投資建議面板計算使用
+// 全域暫存當前標的籌碼與動態基本面資料
 let currentMainChipData = null;
+let currentMarketFundamentals = { pe: null, dividendYield: null };
 
 // 1. 動態字典：初始化時自動從後端 API 下載全台股/ETF名稱
 let TW_STOCK_NAMES = {};
@@ -22,7 +23,7 @@ async function fetchStockNames() {
   }
 }
 
-// 基本面資料字典
+// 基本面備用字典 (當 API 未提供時作為備援)
 const STOCK_FUNDAMENTALS = {
   "1101": { eps: 2.2, dividend: 1.5 },
   "1102": { eps: 2.8, dividend: 2.1 },
@@ -51,7 +52,7 @@ const STOCK_FUNDAMENTALS = {
 // 2. DOM 元素選取與全域變數
 // ------------------------------------------
 let csvInput, market, symbolInput, fetchSymbolBtn, fetchStatus, periodYears, modelMode;
-let showChannelCheckbox, toggleBand; // 🔹 支援 #showChannelCheckbox 與 #toggleBand 雙 DOM 相容
+let showChannelCheckbox, toggleBand; 
 let chart, chartTitle, btnAddToWatchlist, rangeText, zoneText, closeText, r2Text, levelsTable;
 let peText, yieldText, watchlistInput, btnWatchlist, btnClearWatchlist, watchlistResult;
 let watchlistStatus, addWatchlistInput, btnAddWatchlistSingle, removeWatchlistSelect;
@@ -78,7 +79,6 @@ function initDOMElements() {
   periodYears = document.querySelector("#periodYears");
   modelMode = document.querySelector("#modelMode");
   
-  // 🔹 抓取「顯示樂活通道」相關控制項（支援 #toggleBand 與 #showChannelCheckbox）
   toggleBand = document.querySelector("#toggleBand");
   showChannelCheckbox = document.querySelector("#showChannelCheckbox");
 
@@ -114,7 +114,6 @@ function initDOMElements() {
   watchlistSort = document.querySelector("#watchlistSort");
 }
 
-// 判斷當前樂活通道開關狀態 (相容 #toggleBand 與 #showChannelCheckbox)
 function isBandChannelActive() {
   if (toggleBand) {
     if (toggleBand.type === "checkbox") return toggleBand.checked;
@@ -406,8 +405,6 @@ function updateRemoveSelect() {
 // ------------------------------------------
 // 6. 迴歸分析與樂活通道 (Band Channel / ATR) 計算
 // ------------------------------------------
-
-// 🔹 樂活通道關鍵：ATR (Average True Range) 計算
 function calculateATR(data, period = 14) {
   if (!data || data.length === 0) return [];
   
@@ -439,7 +436,6 @@ function calculateATR(data, period = 14) {
   return atr;
 }
 
-// 🔹 樂活通道關鍵：20SMA 中軌與上下軌 (20SMA ± 2 * ATR) 計算
 function calculateBandChannel(data, smaPeriod = 20, atrPeriod = 14, multiplier = 2) {
   const atrValues = calculateATR(data, atrPeriod);
   
@@ -523,7 +519,6 @@ function buildAnalysis(data, currentMode = (modelMode ? modelMode.value : "linea
       minus1: conv(midRaw - fit.sd),
       minus2: conv(midRaw - fit.sd * 2),
       r2: fit.r2,
-      // 疊加樂活通道指標
       bandMid: bandData[idx].bandMid,
       bandUpper: bandData[idx].bandUpper,
       bandLower: bandData[idx].bandLower
@@ -572,13 +567,11 @@ function renderChart(analysis) {
     }
   });
 
-  // 🔹 預設五線譜軌道
   const fiveLinesHtml = levelDefs.map(l => {
     const pointsStr = analysis.map((p, i) => `${x(i)},${y(p[l.key])}`).join(" ");
     return `<polyline points="${pointsStr}" fill="none" stroke="${l.color}" stroke-width="${l.key === 'mid' ? 2.5 : 1.2}" opacity="0.75" />`;
   }).join("");
 
-  // 🔹 根據 Checkbox / Toggle 開關控制是否繪製樂活通道 (Band Channel)
   const isBandActive = isBandChannelActive();
   let bandChannelHtml = "";
 
@@ -650,9 +643,22 @@ function renderChart(analysis) {
           chartTooltip.style.top = `${15 * scaleY}px`;
 
           const symbolCode = symbolInput ? symbolInput.value.trim().toUpperCase() : "";
-          const pFun = getFundamentals(symbolCode, point.close);
-          const histPe = pFun.eps > 0 ? `${(point.close / pFun.eps).toFixed(1)}x` : "N/A (ETF)";
-          const histYield = `${((pFun.dividend / point.close) * 100).toFixed(2)}%`;
+          
+          // 提示框內動態本益比與殖利率計算
+          let histPe = "N/A";
+          let histYield = "N/A";
+          if (currentMarketFundamentals.pe) {
+            histPe = `${currentMarketFundamentals.pe.toFixed(1)}x`;
+          } else {
+            const pFun = getFundamentals(symbolCode, point.close);
+            histPe = pFun.eps > 0 ? `${(point.close / pFun.eps).toFixed(1)}x` : "N/A";
+          }
+          if (currentMarketFundamentals.dividendYield) {
+            histYield = `${(currentMarketFundamentals.dividendYield * 100).toFixed(2)}%`;
+          } else {
+            const pFun = getFundamentals(symbolCode, point.close);
+            histYield = `${((pFun.dividend / point.close) * 100).toFixed(2)}%`;
+          }
 
           chartTooltip.innerHTML = `
             <div class="title">${point.date}</div>
@@ -714,12 +720,24 @@ function render() {
     if (rangeText) rangeText.textContent = getPriceRangeDesc(last);
     
     const symbolCode = symbolInput ? symbolInput.value.trim().toUpperCase() : "";
-    const fun = getFundamentals(symbolCode, last.close);
+    
+    // 💡 渲染主面板的本益比與殖利率（優先採用後端即時抓取數據）
     if (peText) {
-      peText.textContent = fun.eps > 0 ? `${(last.close / fun.eps).toFixed(1)} 倍` : "N/A (ETF)";
+      if (currentMarketFundamentals.pe) {
+        peText.textContent = `${currentMarketFundamentals.pe.toFixed(1)} 倍`;
+      } else {
+        const fun = getFundamentals(symbolCode, last.close);
+        peText.textContent = fun.eps > 0 ? `${(last.close / fun.eps).toFixed(1)} 倍` : "N/A (ETF)";
+      }
     }
+    
     if (yieldText) {
-      yieldText.textContent = `${((fun.dividend / last.close) * 100).toFixed(2)} %`;
+      if (currentMarketFundamentals.dividendYield) {
+        yieldText.textContent = `${(currentMarketFundamentals.dividendYield * 100).toFixed(2)} %`;
+      } else {
+        const fun = getFundamentals(symbolCode, last.close);
+        yieldText.textContent = `${((fun.dividend / last.close) * 100).toFixed(2)} %`;
+      }
     }
 
     updateAdvicePanel(zoneStr, last.r2, currentMainChipData);
@@ -814,7 +832,9 @@ async function fetchLevelForWatchlist(symbol) {
     sym: json.symbol, 
     last: analysis[analysis.length - 1], 
     name: json.name || getStockName(json.symbol) || "",
-    chip: chipData
+    chip: chipData,
+    pe: json.pe || null,
+    dividendYield: json.dividendYield || null
   };
 }
 
@@ -901,9 +921,21 @@ function updateWatchlistDisplay() {
     const zoneColor = isSellSignal ? '#c94b4b' : (isBuySignal ? '#12614a' : '#2c6ebd');
     const smallTextColor = (isBuySignal || isSellSignal) ? '#333333' : '#666666';
 
-    const fun = getFundamentals(item.sym, item.last.close);
-    const peDisp = fun.eps > 0 ? `${(item.last.close / fun.eps).toFixed(1)}x` : "N/A";
-    const yieldDisp = `${((fun.dividend / item.last.close) * 100).toFixed(1)}%`;
+    // 監控清單中的 PE 與殖利率動態顯示
+    let peDisp = "N/A";
+    let yieldDisp = "N/A";
+    if (item.pe) {
+      peDisp = `${item.pe.toFixed(1)}x`;
+    } else {
+      const fun = getFundamentals(item.sym, item.last.close);
+      peDisp = fun.eps > 0 ? `${(item.last.close / fun.eps).toFixed(1)}x` : "N/A";
+    }
+    if (item.dividendYield) {
+      yieldDisp = `${(item.dividendYield * 100).toFixed(1)}%`;
+    } else {
+      const fun = getFundamentals(item.sym, item.last.close);
+      yieldDisp = `${((fun.dividend / item.last.close) * 100).toFixed(1)}%`;
+    }
 
     let chipSummary = '<span style="color:#94a3b8;">無籌碼資料</span>';
     if (item.chip && !item.chip.error) {
@@ -971,7 +1003,6 @@ function updateWatchlistDisplay() {
 // 10. 事件綁定統一管理
 // ------------------------------------------
 function bindEvents() {
-  // 🔹 綁定 Checkbox / Toggle 切換事件 (相容 #toggleBand 與 #showChannelCheckbox)
   const handleBandToggle = () => render();
 
   if (showChannelCheckbox) {
@@ -1061,6 +1092,12 @@ function bindEvents() {
         if (!res.ok) throw new Error();
         const json = await res.json();
         if (csvInput) csvInput.value = JSON.stringify(json.rows);
+        
+        // 💡 儲存從後端抓到的即時本益比與殖利率
+        currentMarketFundamentals = {
+          pe: json.pe || null,
+          dividendYield: json.dividendYield || null
+        };
         
         if (chartTitle) {
           chartTitle.textContent = formatSymbolDisplay(json.symbol, json.name);

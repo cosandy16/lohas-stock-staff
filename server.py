@@ -264,7 +264,7 @@ def fetch_chip_data(raw_symbol):
     return None
 
 # ---------------------------------------------------------
-# Yahoo Finance 歷史股價抓取
+# Yahoo Finance 歷史股價與基本面抓取
 # ---------------------------------------------------------
 def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
     try:
@@ -310,6 +310,10 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             timestamps = result.get("timestamp", [])
             meta = result.get("meta", {})
             regular_market_price = meta.get("regularMarketPrice")
+            
+            # 💡 自動讀取 Yahoo 提供的即時本益比與殖利率
+            trailing_pe = meta.get("trailingPE")
+            dividend_yield = meta.get("dividendYield")
 
             quote_indicators = result.get("indicators", {}).get("quote", [{}])[0]
             raw_closes = quote_indicators.get("close", [])
@@ -364,7 +368,7 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
 
             stock_name = clean_stock_name(raw_stock_name)
 
-            return yahoo_symbol, rows, stock_name
+            return yahoo_symbol, rows, stock_name, trailing_pe, dividend_yield
 
         except Exception as e:
             last_exception = e
@@ -397,7 +401,7 @@ class Handler(BaseHTTPRequestHandler):
             market = query.get("market", ["tw"])[0]
             years = query.get("years", ["3.5"])[0]
             try:
-                actual_symbol, data, stock_name = fetch_yahoo_symbol_with_retry(
+                actual_symbol, data, stock_name, pe, dy = fetch_yahoo_symbol_with_retry(
                     raw_symbol, market, years
                 )
                 self.send_json(
@@ -407,6 +411,8 @@ class Handler(BaseHTTPRequestHandler):
                         "name": stock_name,
                         "source": "Yahoo Finance",
                         "rows": data,
+                        "pe": pe,
+                        "dividendYield": dy,
                     },
                 )
             except Exception as exc:
