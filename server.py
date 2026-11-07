@@ -263,6 +263,66 @@ def fetch_chip_data(raw_symbol):
 
     return None
 
+
+# ---------------------------------------------------------
+# 📊 本益比 / 殖利率 (證交所 BWIBBU_ALL、櫃買 peratio_analysis)
+# ---------------------------------------------------------
+FUNDAMENTALS_CACHE = {"time": 0, "data": {}}
+FUNDAMENTALS_TTL = 60 * 60 * 3  # 3 小時更新一次
+
+def _fetch_json(url, timeout=10):
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout, context=ssl_ctx) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+def _pick(item, keys):
+    for k in keys:
+        if k in item:
+            n = parse_number(item.get(k))
+            if n is not None:
+                return n
+    return None
+
+def load_fundamentals():
+    """回傳 {代號: {"pe": float|None, "yield": float|None}}，資料為官方最新值"""
+    now = time.time()
+    if FUNDAMENTALS_CACHE["data"] and now - FUNDAMENTALS_CACHE["time"] < FUNDAMENTALS_TTL:
+        return FUNDAMENTALS_CACHE["data"]
+
+    result = {}
+    sources = [
+        ("https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL",
+         ["Code", "SecuritiesCode"], ["PEratio", "PERatio"], ["DividendYield", "YieldRatio"]),
+        ("https://www.tpex.org.tw/openapi/v1/tpex_mainboard_peratio_analysis",
+         ["SecuritiesCompanyCode", "Code"], ["PriceEarningRatio", "PEratio", "PERatio"], ["YieldRatio", "DividendYield"]),
+    ]
+    for url, code_keys, pe_keys, yield_keys in sources:
+        try:
+            for item in _fetch_json(url):
+                code = ""
+                for ck in code_keys:
+                    if item.get(ck):
+                        code = str(item[ck]).strip().upper()
+                        break
+                if not code:
+                    continue
+                pe = _pick(item, pe_keys)
+                dy = _pick(item, yield_keys)
+                result[code] = {
+                    "pe": pe if (pe is not None and pe > 0) else None,
+                    "yield": dy if (dy is not None and dy >= 0) else None,
+                }
+        except Exception as e:
+            print(f"⚠️ 本益比/殖利率來源失敗 ({url}): {e}")
+
+    if result:
+        FUNDAMENTALS_CACHE["data"] = result
+        FUNDAMENTALS_CACHE["time"] = now
+    return result or FUNDAMENTALS_CACHE["data"]
+
+def get_fundamentals(symbol_code):
+    return load_fundamentals().get(symbol_code.split(".")[0].strip().upper(), {"pe": None, "yield": None})
+
 # ---------------------------------------------------------
 # Yahoo Finance 歷史股價抓取
 # ---------------------------------------------------------
@@ -406,6 +466,7 @@ class Handler(BaseHTTPRequestHandler):
                         "symbol": actual_symbol,
                         "name": stock_name,
                         "source": "Yahoo Finance",
+                        "fundamentals": get_fundamentals(actual_symbol),
                         "rows": data,
                     },
                 )

@@ -22,30 +22,16 @@ async function fetchStockNames() {
   }
 }
 
-// 基本面資料字典
-const STOCK_FUNDAMENTALS = {
-  "1101": { eps: 2.2, dividend: 1.5 },
-  "1102": { eps: 2.8, dividend: 2.1 },
-  "1216": { eps: 7.2, dividend: 5.5 },
-  "1513": { eps: 6.0, dividend: 3.5 },
-  "2303": { eps: 4.5, dividend: 3.0 },
-  "2308": { eps: 12.8, dividend: 8.0 },
-  "2317": { eps: 10.2, dividend: 5.4 },
-  "2330": { eps: 38.2, dividend: 16.0 },
-  "2379": { eps: 26.0, dividend: 18.0 },
-  "2382": { eps: 10.3, dividend: 7.2 },
-  "2412": { eps: 4.8, dividend: 4.7 },
-  "2454": { eps: 48.5, dividend: 30.4 },
-  "2731": { eps: 8.8, dividend: 5.6 },
-  "2881": { eps: 4.8, dividend: 2.5 },
-  "2882": { eps: 3.6, dividend: 2.0 },
-  "2884": { eps: 1.6, dividend: 1.2 },
-  "2886": { eps: 2.37, dividend: 1.5 },
-  "2891": { eps: 2.82, dividend: 1.8 },
-  "3029": { eps: 7.2, dividend: 4.8 },
-  "9917": { eps: 6.6, dividend: 5.2 },
-  "9939": { eps: 7.8, dividend: 5.5 }
-};
+// 基本面資料：由後端 /api/yahoo 回傳官方最新本益比與殖利率
+let currentFundamentals = { pe: null, yield: null };
+
+function fmtPe(pe, digits = 1, suffix = "x") {
+  return Number.isFinite(pe) && pe > 0 ? `${pe.toFixed(digits)}${suffix}` : "N/A";
+}
+function fmtYield(y, digits = 2) {
+  return Number.isFinite(y) && y >= 0 ? `${y.toFixed(digits)}%` : "N/A";
+}
+
 
 // ------------------------------------------
 // 2. DOM 元素選取與全域變數
@@ -195,17 +181,12 @@ function updateAdvicePanel(zoneName, r2Value, chipData) {
 // ------------------------------------------
 // 4. 通用工具與計算函式
 // ------------------------------------------
-function getFundamentals(symbol, currentPrice) {
-  if (!symbol) return { eps: 10, dividend: 4 };
-  const code = symbol.replace(/\.(TW|TWO)$/i, "").toUpperCase();
-  if (STOCK_FUNDAMENTALS[code]) {
-    return STOCK_FUNDAMENTALS[code];
-  }
-  const safePrice = currentPrice || 100;
-  return {
-    eps: +(safePrice / 16).toFixed(2),
-    dividend: +(safePrice * 0.04).toFixed(2)
-  };
+function analysisLastRaw() {
+  try {
+    const rows = JSON.parse(csvInput.value);
+    const last = rows[rows.length - 1];
+    return Number(last.raw_close || last.close) || null;
+  } catch (e) { return null; }
 }
 
 function getStockName(symbol) {
@@ -649,10 +630,10 @@ function renderChart(analysis) {
           chartTooltip.style.left = `${tooltipLeft * scaleX}px`;
           chartTooltip.style.top = `${15 * scaleY}px`;
 
-          const symbolCode = symbolInput ? symbolInput.value.trim().toUpperCase() : "";
-          const pFun = getFundamentals(symbolCode, point.close);
-          const histPe = pFun.eps > 0 ? `${(point.close / pFun.eps).toFixed(1)}x` : "N/A (ETF)";
-          const histYield = `${((pFun.dividend / point.close) * 100).toFixed(2)}%`;
+          const pxNow = analysisLastRaw();
+          const pRaw = point.raw_close || point.close;
+          const histPe = (currentFundamentals.pe && pxNow) ? `${(pRaw / (pxNow / currentFundamentals.pe)).toFixed(1)}x` : "N/A";
+          const histYield = (currentFundamentals.yield != null && pxNow) ? `${((pxNow * currentFundamentals.yield / 100) / pRaw * 100).toFixed(2)}%` : "N/A";
 
           chartTooltip.innerHTML = `
             <div class="title">${point.date}</div>
@@ -713,14 +694,8 @@ function render() {
     if (r2Text) r2Text.textContent = last.r2.toFixed(3);
     if (rangeText) rangeText.textContent = getPriceRangeDesc(last);
     
-    const symbolCode = symbolInput ? symbolInput.value.trim().toUpperCase() : "";
-    const fun = getFundamentals(symbolCode, last.close);
-    if (peText) {
-      peText.textContent = fun.eps > 0 ? `${(last.close / fun.eps).toFixed(1)} 倍` : "N/A (ETF)";
-    }
-    if (yieldText) {
-      yieldText.textContent = `${((fun.dividend / last.close) * 100).toFixed(2)} %`;
-    }
+    if (peText) peText.textContent = Number.isFinite(currentFundamentals.pe) ? `${currentFundamentals.pe.toFixed(1)} 倍` : "N/A";
+    if (yieldText) yieldText.textContent = fmtYield(currentFundamentals.yield);
 
     updateAdvicePanel(zoneStr, last.r2, currentMainChipData);
     renderChart(analysis);
@@ -824,7 +799,8 @@ async function fetchLevelForWatchlist(symbol) {
     change,
     changePct,
     name: json.name || getStockName(json.symbol) || "",
-    chip: chipData
+    chip: chipData,
+    fundamentals: json.fundamentals || { pe: null, yield: null }
   };
 }
 
@@ -911,9 +887,8 @@ function updateWatchlistDisplay() {
     const zoneColor = isSellSignal ? '#c94b4b' : (isBuySignal ? '#12614a' : '#2c6ebd');
     const smallTextColor = (isBuySignal || isSellSignal) ? '#333333' : '#666666';
 
-    const fun = getFundamentals(item.sym, item.last.close);
-    const peDisp = fun.eps > 0 ? `${(item.last.close / fun.eps).toFixed(1)}x` : "N/A";
-    const yieldDisp = `${((fun.dividend / item.last.close) * 100).toFixed(1)}%`;
+    const peDisp = fmtPe(item.fundamentals && item.fundamentals.pe);
+    const yieldDisp = fmtYield(item.fundamentals && item.fundamentals.yield, 2);
 
     let chipSummary = '<span style="color:#94a3b8;">無籌碼資料</span>';
     if (item.chip && !item.chip.error) {
@@ -1079,6 +1054,7 @@ function bindEvents() {
         const res = await fetch(`/api/yahoo?${p.toString()}`);
         if (!res.ok) throw new Error();
         const json = await res.json();
+        currentFundamentals = json.fundamentals || { pe: null, yield: null };
         if (csvInput) csvInput.value = JSON.stringify(json.rows);
         
         if (chartTitle) {
