@@ -810,9 +810,19 @@ async function fetchLevelForWatchlist(symbol) {
   const chipData = chipRes.status === "fulfilled" ? chipRes.value : null;
   const analysis = buildAnalysis(json.rows, "linear", "3.5");
 
-  return { 
-    sym: json.symbol, 
-    last: analysis[analysis.length - 1], 
+  // 以最新交易日價格對比前一交易日收盤價，計算當日漲跌
+  const latest = analysis[analysis.length - 1];
+  const previous = analysis.length > 1 ? analysis[analysis.length - 2] : null;
+  const currentPrice = Number(latest.raw_close || latest.close);
+  const previousPrice = previous ? Number(previous.raw_close || previous.close) : null;
+  const change = previousPrice > 0 ? currentPrice - previousPrice : null;
+  const changePct = previousPrice > 0 ? (change / previousPrice) * 100 : null;
+
+  return {
+    sym: json.symbol,
+    last: latest,
+    change,
+    changePct,
     name: json.name || getStockName(json.symbol) || "",
     chip: chipData
   };
@@ -918,12 +928,21 @@ function updateWatchlistDisplay() {
     const displayName = item.name || getStockName(item.sym) || "";
     const badge = getActionBadge(priceZone(item.last), item.chip, item.last.r2);
 
+    const priceChange = Number.isFinite(item.change) && Number.isFinite(item.changePct);
+    const changeColor = !priceChange || item.change === 0 ? "#667085" : (item.change > 0 ? "#c94b4b" : "#1f8a63");
+    const changeArrow = !priceChange || item.change === 0 ? "－" : (item.change > 0 ? "▲" : "▼");
+    const changeText = priceChange
+      ? `${changeArrow} ${item.change > 0 ? "+" : ""}${item.change.toFixed(2)} (${item.changePct > 0 ? "+" : ""}${item.changePct.toFixed(2)}%)`
+      : "漲跌幅：資料不足";
+
     card.innerHTML = `
       <div>
         <strong>${item.sym}</strong>${displayName ? `<span style="color:#555; font-size:0.85em; margin-left:6px; font-weight:600;">${displayName}</span>` : ""}<br>
         <small style="color:${smallTextColor}; display: block; margin-top: 4px; line-height: 1.5;">
-          <span style="white-space: nowrap;">現價: ${formatPrice(item.last.raw_close || item.last.close)}</span> 
+          <span style="white-space: nowrap;">現價: ${formatPrice(item.last.raw_close || item.last.close)}</span>
           <span style="white-space: nowrap;">(還原: ${formatPrice(item.last.close)})</span>
+          <br>
+          <span style="white-space: nowrap; color:${changeColor}; font-weight:900;">${changeText}</span>
           <br>
           <span style="white-space: nowrap;">PE: ${peDisp}</span> | 
           <span style="white-space: nowrap;">殖利率: ${yieldDisp}</span>
