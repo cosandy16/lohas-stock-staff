@@ -346,7 +346,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
-const WATCHLIST_CACHE_VERSION = "v5";
+const WATCHLIST_CACHE_VERSION = "v8";
 
 function loadWatchlistFromCache() {
   // 舊版程式存下的快取 (漲跌、PE、殖利率可能是錯的) 直接丟棄
@@ -817,7 +817,10 @@ async function fetchLevelForWatchlist(symbol) {
     changePct,
     name: json.name || getStockName(json.symbol) || "",
     chip: chipData,
-    fundamentals: json.fundamentals || { pe: null, yield: null }
+    fundamentals: json.fundamentals || { pe: null, yield: null },
+    prevClose: previousPrice,
+    prevSource: json.prev_source || "(舊版server)",
+    serverVersion: json.server_version || "舊版"
   };
 }
 
@@ -935,6 +938,8 @@ function updateWatchlistDisplay() {
           <span style="white-space: nowrap;">(還原: ${formatPrice(item.last.close)})</span>
           <br>
           <span style="white-space: nowrap; color:${changeColor}; font-weight:900;">${changeText}</span>
+          <br>
+          <span style="white-space: nowrap; font-size:0.85em; color:#94a3b8;">昨收 ${Number.isFinite(item.prevClose) ? formatPrice(item.prevClose) : "N/A"} · ${item.prevSource || "舊快取"} · ${item.serverVersion || ""}</span>
           <br>
           <span style="white-space: nowrap;">PE: ${peDisp}</span> | 
           <span style="white-space: nowrap;">殖利率: ${yieldDisp}</span>

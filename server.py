@@ -11,6 +11,8 @@ from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+SERVER_VERSION = "fixed8"
+PREV_SOURCE = {}
 ROOT = Path(__file__).resolve().parent
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8769"))
@@ -397,6 +399,7 @@ def official_previous_close(symbol, rows):
         return None
 
     def done(prev, how):
+        PREV_SOURCE[symbol.split(".")[0].strip().upper()] = "官方" + how
         print(f"✅ [{symbol}] 昨收 {prev} (官方資料: {how}; 官方收盤 {q_close}, 漲跌 {q_change})")
         return prev
 
@@ -541,9 +544,12 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
 
             # 前一交易日實際收盤價 (取自歷史序列倒數第二筆；
             # 不可用 meta.chartPreviousClose，那是圖表區間起點之前的收盤價)
+            _code = yahoo_symbol.split(".")[0].strip().upper()
+            PREV_SOURCE.pop(_code, None)
             previous_close = official_previous_close(yahoo_symbol, rows)
             if previous_close is None:
                 previous_close = rows[-2]["raw_close"] if len(rows) > 1 else None
+                PREV_SOURCE[_code] = "Yahoo歷史(備援)"
 
             # 近 12 個月配息總和 (Yahoo events=div，ETF 沒有官方殖利率時用來計算)
             ttm_dividend = 0.0
@@ -581,6 +587,31 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
 
+        if parsed.path == "/api/debug":
+            query = urllib.parse.parse_qs(parsed.query)
+            raw_symbol = query.get("symbol", ["0050"])[0]
+            code = raw_symbol.split(".")[0].strip().upper()
+            info = {"server_version": SERVER_VERSION}
+            try:
+                actual_symbol, data, _n, prev, ttm = fetch_yahoo_symbol_with_retry(raw_symbol, "tw", "1")
+                info.update({
+                    "symbol": actual_symbol,
+                    "last_5_rows": data[-5:],
+                    "previous_close_used": prev,
+                    "prev_source": PREV_SOURCE.get(code, ""),
+                    "ttm_dividend": ttm,
+                })
+            except Exception as exc:
+                info["yahoo_error"] = str(exc)
+            dq = load_daily_quotes()
+            info["daily_quotes_loaded"] = len(dq)
+            info["official_daily_quote"] = dq.get(code)
+            fd = load_fundamentals()
+            info["fundamentals_loaded"] = len(fd)
+            info["official_fundamentals"] = fd.get(code)
+            self.send_json(200, info)
+            return
+
         if parsed.path == "/api/names":
             self.send_json(200, STOCK_NAME_MAP)
             return
@@ -603,6 +634,8 @@ class Handler(BaseHTTPRequestHandler):
                         "fundamentals": build_fundamentals(actual_symbol, data, ttm_dividend),
                         "rows": data,
                         "previous_close": previous_close,
+                        "prev_source": PREV_SOURCE.get(actual_symbol.split(".")[0].strip().upper(), ""),
+                        "server_version": SERVER_VERSION,
                     },
                 )
             except Exception as exc:
