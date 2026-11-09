@@ -399,12 +399,18 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
                     valid_raw = rc if rc is not None else ac
 
                     if valid_adj is not None and valid_raw is not None:
-                        dt_str = date.fromtimestamp(t).isoformat()
-                        rows.append({
+                        gmtoffset = meta.get("gmtoffset", 28800)
+                        dt_str = datetime.datetime.utcfromtimestamp(t + gmtoffset).date().isoformat()
+                        row = {
                             "date": dt_str,
                             "close": float(valid_adj),
                             "raw_close": float(valid_raw),
-                        })
+                        }
+                        # Yahoo 偶爾同一天回傳兩筆 (盤中即時價 + 當日日K)，同日只保留最後一筆
+                        if rows and rows[-1]["date"] == dt_str:
+                            rows[-1] = row
+                        else:
+                            rows.append(row)
 
             if rows and regular_market_price is not None:
                 latest_raw = float(regular_market_price)
