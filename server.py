@@ -370,6 +370,13 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             timestamps = result.get("timestamp", [])
             meta = result.get("meta", {})
             regular_market_price = meta.get("regularMarketPrice")
+            # Yahoo Finance 提供的前一交易日收盤價，優先於歷史序列推算
+            previous_close = (
+                meta.get("chartPreviousClose")
+                or meta.get("previousClose")
+                or meta.get("regularMarketPreviousClose")
+            )
+            previous_close = float(previous_close) if previous_close is not None else None
 
             quote_indicators = result.get("indicators", {}).get("quote", [{}])[0]
             raw_closes = quote_indicators.get("close", [])
@@ -424,7 +431,7 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
 
             stock_name = clean_stock_name(raw_stock_name)
 
-            return yahoo_symbol, rows, stock_name
+            return yahoo_symbol, rows, stock_name, previous_close
 
         except Exception as e:
             last_exception = e
@@ -457,7 +464,7 @@ class Handler(BaseHTTPRequestHandler):
             market = query.get("market", ["tw"])[0]
             years = query.get("years", ["3.5"])[0]
             try:
-                actual_symbol, data, stock_name = fetch_yahoo_symbol_with_retry(
+                actual_symbol, data, stock_name, previous_close = fetch_yahoo_symbol_with_retry(
                     raw_symbol, market, years
                 )
                 self.send_json(
@@ -468,6 +475,7 @@ class Handler(BaseHTTPRequestHandler):
                         "source": "Yahoo Finance",
                         "fundamentals": get_fundamentals(actual_symbol),
                         "rows": data,
+                        "previous_close": previous_close,
                     },
                 )
             except Exception as exc:

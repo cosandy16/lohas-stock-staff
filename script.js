@@ -789,7 +789,11 @@ async function fetchLevelForWatchlist(symbol) {
   const latest = analysis[analysis.length - 1];
   const previous = analysis.length > 1 ? analysis[analysis.length - 2] : null;
   const currentPrice = Number(latest.raw_close || latest.close);
-  const previousPrice = previous ? Number(previous.raw_close || previous.close) : null;
+  // 優先使用 Yahoo 回傳的前一交易日收盤價，避免歷史序列/還原價造成誤差
+  const yahooPreviousClose = Number(json.previous_close);
+  const previousPrice = Number.isFinite(yahooPreviousClose) && yahooPreviousClose > 0
+    ? yahooPreviousClose
+    : (previous ? Number(previous.raw_close || previous.close) : null);
   const change = previousPrice > 0 ? currentPrice - previousPrice : null;
   const changePct = previousPrice > 0 ? (change / previousPrice) * 100 : null;
 
