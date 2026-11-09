@@ -339,9 +339,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   loadWatchlistFromCache();
   bindEvents();
+
+  // 開啟頁面時自動重新掃描觀察清單，避免一直顯示舊快取
+  if (watchlistInput && watchlistInput.value.trim() && btnWatchlist) {
+    setTimeout(() => btnWatchlist.click(), 500);
+  }
 });
 
+const WATCHLIST_CACHE_VERSION = "v5";
+
 function loadWatchlistFromCache() {
+  // 舊版程式存下的快取 (漲跌、PE、殖利率可能是錯的) 直接丟棄
+  if (localStorage.getItem("lohas_watchlist_cache_version") !== WATCHLIST_CACHE_VERSION) {
+    localStorage.removeItem("lohas_watchlist_cache_data");
+    localStorage.removeItem("lohas_watchlist_cache_time");
+    localStorage.setItem("lohas_watchlist_cache_version", WATCHLIST_CACHE_VERSION);
+  }
   const cachedData = localStorage.getItem("lohas_watchlist_cache_data");
   const cachedTime = localStorage.getItem("lohas_watchlist_cache_time");
 
