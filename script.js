@@ -340,13 +340,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   loadWatchlistFromCache();
   bindEvents();
 
-  // 開啟頁面時自動重新掃描觀察清單，避免一直顯示舊快取
+  // 開啟頁面時：快取超過 30 分鐘 (或沒有快取) 才自動更新一次，否則沿用快取，可隨時手動按「執行批量掃描更新」
+  const AUTO_REFRESH_MINUTES = 30;
   if (watchlistInput && watchlistInput.value.trim() && btnWatchlist) {
-    setTimeout(() => btnWatchlist.click(), 500);
+    const lastScan = Number(localStorage.getItem("lohas_watchlist_last_scan_ts")) || 0;
+    const ageMin = (Date.now() - lastScan) / 60000;
+    if (!scannedWatchlistCache.length || ageMin > AUTO_REFRESH_MINUTES) {
+      setTimeout(() => btnWatchlist.click(), 500);
+    }
   }
 });
 
-const WATCHLIST_CACHE_VERSION = "v11";
+const WATCHLIST_CACHE_VERSION = "v12";
 
 function loadWatchlistFromCache() {
   // 舊版程式存下的快取 (漲跌、PE、殖利率可能是錯的) 直接丟棄
@@ -1040,6 +1045,7 @@ function bindEvents() {
 
         updateWatchlistDisplay();
         saveWatchlistCache();
+        if (successCount > 0) localStorage.setItem("lohas_watchlist_last_scan_ts", String(Date.now()));
 
         if (failCount === 0) {
           watchlistStatus.textContent = `✅ 更新完成 (共 ${successCount} 檔)`;
