@@ -145,11 +145,12 @@ function assessChip(last, symbol, chip) {
   const avgVol = Number(last && last.avgVol) || 0;
   const strong = avgVol > 0 ? Math.abs(net) / (avgVol * days) >= 0.02 : Math.abs(net) >= 1000;
   const sign = (v) => (v >= 0 ? "+" : "") + v.toLocaleString();
-  const text = `${has5 ? `近 ${days} 日` : "單日"}外資+投信合計 ${sign(net)} 張 (外資 ${sign(foreign)} / 投信 ${sign(trust)})`;
+  const label = `${has5 ? `近 ${days} 日` : "單日"}外資+投信`;
+  const text = `${label}合計 ${sign(net)} 張 (外資 ${sign(foreign)} / 投信 ${sign(trust)})`;
   let state = "neutral";
   if (strong && net > 0) state = "strongBuy";
   else if (strong && net < 0) state = "strongSell";
-  return { state, text, net };
+  return { state, text, net, label };
 }
 
 function evaluateAdvice(last, symbol, chip) {
@@ -400,7 +401,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
-const WATCHLIST_CACHE_VERSION = "v13";
+const WATCHLIST_CACHE_VERSION = "v14";
 
 function loadWatchlistFromCache() {
   // 舊版程式存下的快取 (漲跌、PE、殖利率可能是錯的) 直接丟棄
@@ -970,11 +971,19 @@ function updateWatchlistDisplay() {
     const yieldDisp = fmtYield(item.fundamentals && item.fundamentals.yield, 2);
 
     let chipSummary = '<span style="color:#94a3b8;">無籌碼資料</span>';
-    if (item.chip && !item.chip.error) {
-      const total = item.chip.total || 0;
-      const chipColor = total > 0 ? "#c94b4b" : (total < 0 ? "#1f8a63" : "inherit");
-      const sign = total > 0 ? "+" : "";
-      chipSummary = `三大法人: <strong style="color:${chipColor}">${sign}${total.toLocaleString()} 張</strong>`;
+    if (isEtfSymbol(item.sym)) {
+      chipSummary = '<span style="color:#94a3b8;">法人籌碼：ETF 不計入判斷</span>';
+    } else if (item.chip && !item.chip.error) {
+      const cs = assessChip(item.last, item.sym, item.chip);
+      const colorOf = (v) => v > 0 ? "#c94b4b" : (v < 0 ? "#1f8a63" : "inherit");
+      const signOf = (v) => v > 0 ? "+" : "";
+      if (Number.isFinite(cs.net)) {
+        chipSummary = `${cs.label}: <strong style="color:${colorOf(cs.net)}">${signOf(cs.net)}${cs.net.toLocaleString()} 張</strong>`;
+        const todayTotal = item.chip.total;
+        if (Number.isFinite(todayTotal) && Number.isFinite(item.chip.total5)) {
+          chipSummary += ` <span style="color:#94a3b8; font-size:0.9em;">(今日三大法人 ${signOf(todayTotal)}${todayTotal.toLocaleString()})</span>`;
+        }
+      }
     }
 
     const nearest = getNearestLevel(item.last);
@@ -998,8 +1007,7 @@ function updateWatchlistDisplay() {
           <br>
           <span style="white-space: nowrap; color:${changeColor}; font-weight:900;">${changeText}</span>
           <br>
-          <span style="white-space: nowrap;">PE: ${peDisp}</span> | 
-          <span style="white-space: nowrap;">殖利率: ${yieldDisp}</span>
+          <span style="display:inline-block; white-space: nowrap; margin-right: 14px;">PE: ${peDisp}</span><span style="display:inline-block; white-space: nowrap;">殖利率: ${yieldDisp}</span>
           <br>
           <span style="white-space: nowrap;">${chipSummary}</span>
         </small>
