@@ -11,7 +11,7 @@ from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-SERVER_VERSION = "fixed9"
+SERVER_VERSION = "fixed10"
 PREV_SOURCE = {}
 ROOT = Path(__file__).resolve().parent
 HOST = os.environ.get("HOST", "0.0.0.0")
@@ -464,7 +464,7 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             end_dt = date.today()
             start_dt = end_dt - timedelta(days=int((years + 0.6) * 365))
             period1 = int(time.mktime(start_dt.timetuple()))
-            period2 = int(time.mktime(end_dt.timetuple()))
+            period2 = int(time.mktime((end_dt + timedelta(days=2)).timetuple()))
 
             url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?period1={period1}&period2={period2}&interval=1d&events=div"
             req = urllib.request.Request(
@@ -516,12 +516,34 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
 
             if rows and regular_market_price is not None:
                 latest_raw = float(regular_market_price)
-                last_raw = rows[-1]["raw_close"]
+                last_row = rows[-1]
 
-                if last_raw > 0:
-                    ratio = latest_raw / last_raw
-                    rows[-1]["raw_close"] = latest_raw
-                    rows[-1]["close"] = round(rows[-1]["close"] * ratio, 2)
+                # 即時價所屬的交易日 (以交易所時區換算)
+                market_date = None
+                rmt = meta.get("regularMarketTime")
+                if rmt:
+                    try:
+                        market_date = datetime.datetime.utcfromtimestamp(
+                            rmt + meta.get("gmtoffset", 28800)
+                        ).date().isoformat()
+                    except Exception:
+                        market_date = None
+
+                if last_row["raw_close"] > 0:
+                    ratio = latest_raw / last_row["raw_close"]
+                    adj_factor = last_row["close"] / last_row["raw_close"]  # 還原係數
+
+                    if market_date and market_date > last_row["date"]:
+                        # Yahoo 尚未提供今天的日K：新增今天這一筆，絕不覆蓋前一個交易日
+                        rows.append({
+                            "date": market_date,
+                            "close": round(latest_raw * adj_factor, 2),
+                            "raw_close": latest_raw,
+                        })
+                    else:
+                        # 最後一筆就是今天：以即時價更新
+                        last_row["raw_close"] = latest_raw
+                        last_row["close"] = round(last_row["close"] * ratio, 2)
 
             if not rows:
                 raise ValueError("解析後無有效收盤價歷史紀錄")

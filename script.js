@@ -346,7 +346,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
-const WATCHLIST_CACHE_VERSION = "v9";
+const WATCHLIST_CACHE_VERSION = "v10";
 
 function loadWatchlistFromCache() {
   // 舊版程式存下的快取 (漲跌、PE、殖利率可能是錯的) 直接丟棄
