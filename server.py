@@ -323,6 +323,84 @@ def load_fundamentals():
 def get_fundamentals(symbol_code):
     return load_fundamentals().get(symbol_code.split(".")[0].strip().upper(), {"pe": None, "yield": None})
 
+# ---------------------------------------------------------
+# 📈 官方每日收盤價與漲跌 (證交所 STOCK_DAY_ALL、櫃買 daily_close_quotes)
+#    Yahoo 對部分標的 (如 0050) 的歷史收盤價有誤，漲跌改以官方資料為準
+# ---------------------------------------------------------
+DAILY_CACHE = {"time": 0, "data": {}}
+DAILY_TTL = 60 * 5
+
+def _roc_to_iso(v):
+    v = str(v or "").strip()
+    try:
+        if len(v) == 7 and v.isdigit():      # 1151109
+            return f"{int(v[:3]) + 1911}-{v[3:5]}-{v[5:]}"
+        if len(v) == 8 and v.isdigit():      # 20261109
+            return f"{v[:4]}-{v[4:6]}-{v[6:]}"
+    except Exception:
+        pass
+    return None
+
+def load_daily_quotes():
+    """回傳 {代號: {"close": 收盤, "change": 漲跌價差, "date": 'YYYY-MM-DD' 或 None}}"""
+    now = time.time()
+    if DAILY_CACHE["data"] and now - DAILY_CACHE["time"] < DAILY_TTL:
+        return DAILY_CACHE["data"]
+
+    result = {}
+    sources = [
+        ("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
+         ["Code", "SecuritiesCode"], ["ClosingPrice"], ["Change"]),
+        ("https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes",
+         ["SecuritiesCompanyCode", "Code"], ["Close", "ClosingPrice"], ["Change"]),
+    ]
+    for url, code_keys, close_keys, change_keys in sources:
+        try:
+            for item in _fetch_json(url):
+                code = ""
+                for ck in code_keys:
+                    if item.get(ck):
+                        code = str(item[ck]).strip().upper()
+                        break
+                if not code:
+                    continue
+                close = _pick(item, close_keys)
+                change = _pick(item, change_keys)
+                if close is None or close <= 0 or change is None:
+                    continue
+                result[code] = {
+                    "close": close,
+                    "change": change,
+                    "date": _roc_to_iso(item.get("Date")),
+                }
+        except Exception as e:
+            print(f"⚠️ 官方每日收盤來源失敗 ({url}): {e}")
+
+    if result:
+        DAILY_CACHE["data"] = result
+        DAILY_CACHE["time"] = now
+    return result or DAILY_CACHE["data"]
+
+def official_previous_close(symbol, rows):
+    """以官方資料求前一交易日收盤價；對不上最新交易日時回傳 None"""
+    if not rows:
+        return None
+    q = load_daily_quotes().get(symbol.split(".")[0].strip().upper())
+    if not q:
+        return None
+    last_date = rows[-1]["date"]
+    last_price = rows[-1]["raw_close"]
+    q_date = q["date"]
+
+    # 官方資料就是最新交易日：昨收 = 收盤 - 漲跌價差
+    if (q_date == last_date) or (q_date is None and last_price and abs(q["close"] - last_price) / last_price < 0.002):
+        prev = q["close"] - q["change"]
+        return round(prev, 4) if prev > 0 else None
+    # 盤中：官方資料還停在上一個交易日，其收盤價即為昨收
+    if q_date and q_date < last_date:
+        return q["close"]
+    return None
+
 def build_fundamentals(symbol, rows, ttm_dividend):
     """官方 PE/殖利率優先；ETF 等官方沒有殖利率時，以近 12 個月配息 ÷ 現價估算"""
     f = dict(get_fundamentals(symbol))
@@ -442,7 +520,9 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
 
             # 前一交易日實際收盤價 (取自歷史序列倒數第二筆；
             # 不可用 meta.chartPreviousClose，那是圖表區間起點之前的收盤價)
-            previous_close = rows[-2]["raw_close"] if len(rows) > 1 else None
+            previous_close = official_previous_close(yahoo_symbol, rows)
+            if previous_close is None:
+                previous_close = rows[-2]["raw_close"] if len(rows) > 1 else None
 
             # 近 12 個月配息總和 (Yahoo events=div，ETF 沒有官方殖利率時用來計算)
             ttm_dividend = 0.0
