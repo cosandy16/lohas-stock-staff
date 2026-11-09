@@ -323,6 +323,17 @@ def load_fundamentals():
 def get_fundamentals(symbol_code):
     return load_fundamentals().get(symbol_code.split(".")[0].strip().upper(), {"pe": None, "yield": None})
 
+def build_fundamentals(symbol, rows, ttm_dividend):
+    """官方 PE/殖利率優先；ETF 等官方沒有殖利率時，以近 12 個月配息 ÷ 現價估算"""
+    f = dict(get_fundamentals(symbol))
+    f["yield_source"] = "official" if f.get("yield") is not None else None
+    if f.get("yield") is None and ttm_dividend and rows:
+        price = rows[-1].get("raw_close")
+        if price and price > 0:
+            f["yield"] = round(ttm_dividend / price * 100, 2)
+            f["yield_source"] = "ttm"
+    return f
+
 # ---------------------------------------------------------
 # Yahoo Finance 歷史股價抓取
 # ---------------------------------------------------------
@@ -353,7 +364,7 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             period1 = int(time.mktime(start_dt.timetuple()))
             period2 = int(time.mktime(end_dt.timetuple()))
 
-            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?period1={period1}&period2={period2}&interval=1d"
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?period1={period1}&period2={period2}&interval=1d&events=div"
             req = urllib.request.Request(
                 url,
                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
@@ -370,14 +381,6 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             timestamps = result.get("timestamp", [])
             meta = result.get("meta", {})
             regular_market_price = meta.get("regularMarketPrice")
-            # Yahoo Finance 提供的前一交易日收盤價，優先於歷史序列推算
-            previous_close = (
-                meta.get("chartPreviousClose")
-                or meta.get("previousClose")
-                or meta.get("regularMarketPreviousClose")
-            )
-            previous_close = float(previous_close) if previous_close is not None else None
-
             quote_indicators = result.get("indicators", {}).get("quote", [{}])[0]
             raw_closes = quote_indicators.get("close", [])
 
@@ -431,7 +434,24 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
 
             stock_name = clean_stock_name(raw_stock_name)
 
-            return yahoo_symbol, rows, stock_name, previous_close
+            # 前一交易日實際收盤價 (取自歷史序列倒數第二筆；
+            # 不可用 meta.chartPreviousClose，那是圖表區間起點之前的收盤價)
+            previous_close = rows[-2]["raw_close"] if len(rows) > 1 else None
+
+            # 近 12 個月配息總和 (Yahoo events=div，ETF 沒有官方殖利率時用來計算)
+            ttm_dividend = 0.0
+            try:
+                cutoff = time.time() - 365 * 86400
+                divs = (result.get("events", {}) or {}).get("dividends", {}) or {}
+                for d in divs.values():
+                    ts = d.get("date")
+                    amt = d.get("amount")
+                    if ts is not None and amt is not None and ts >= cutoff:
+                        ttm_dividend += float(amt)
+            except Exception as e:
+                print(f"⚠️ 配息資料解析失敗: {e}")
+
+            return yahoo_symbol, rows, stock_name, previous_close, ttm_dividend
 
         except Exception as e:
             last_exception = e
@@ -464,7 +484,7 @@ class Handler(BaseHTTPRequestHandler):
             market = query.get("market", ["tw"])[0]
             years = query.get("years", ["3.5"])[0]
             try:
-                actual_symbol, data, stock_name, previous_close = fetch_yahoo_symbol_with_retry(
+                actual_symbol, data, stock_name, previous_close, ttm_dividend = fetch_yahoo_symbol_with_retry(
                     raw_symbol, market, years
                 )
                 self.send_json(
@@ -473,7 +493,7 @@ class Handler(BaseHTTPRequestHandler):
                         "symbol": actual_symbol,
                         "name": stock_name,
                         "source": "Yahoo Finance",
-                        "fundamentals": get_fundamentals(actual_symbol),
+                        "fundamentals": build_fundamentals(actual_symbol, data, ttm_dividend),
                         "rows": data,
                         "previous_close": previous_close,
                     },
