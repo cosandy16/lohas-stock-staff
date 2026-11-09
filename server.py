@@ -11,7 +11,7 @@ from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-SERVER_VERSION = "fixed10"
+SERVER_VERSION = "fixed13"
 PREV_SOURCE = {}
 ROOT = Path(__file__).resolve().parent
 HOST = os.environ.get("HOST", "0.0.0.0")
@@ -176,8 +176,19 @@ def fetch_finmind_chip(symbol_code):
         t_diff = t_buy - t_sell
         d_diff = d_buy - d_sell
 
+        # 近 5 個交易日累計 (單日買賣超雜訊大，建議判斷改看多日)
+        recent_dates = sorted(by_date.keys())[-5:]
+        def _net(dd, k):
+            return int(round((dd[k + "_buy"] - dd[k + "_sell"]) / 1000.0))
+        foreign5 = sum(_net(by_date[x], "foreign") for x in recent_dates)
+        trust5 = sum(_net(by_date[x], "trust") for x in recent_dates)
+        dealer5 = sum(_net(by_date[x], "dealer") for x in recent_dates)
+
         return {
             "date": latest_date,
+            "days": len(recent_dates),
+            "foreign5": foreign5, "trust5": trust5, "dealer5": dealer5,
+            "total5": foreign5 + trust5 + dealer5,
             "foreign": f_diff, "foreign_buy": f_buy, "foreign_sell": f_sell,
             "trust": t_diff, "trust_buy": t_buy, "trust_sell": t_sell,
             "dealer": d_diff, "dealer_buy": d_buy, "dealer_sell": d_sell,
@@ -494,8 +505,10 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             if not raw_closes:
                 raw_closes = adj_closes
 
+            volumes = quote_indicators.get("volume", []) or []
+
             rows = []
-            for t, rc, ac in zip(timestamps, raw_closes, adj_closes):
+            for _i, (t, rc, ac) in enumerate(zip(timestamps, raw_closes, adj_closes)):
                 if t is not None:
                     valid_adj = ac if ac is not None else rc
                     valid_raw = rc if rc is not None else ac
@@ -507,6 +520,7 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
                             "date": dt_str,
                             "close": float(valid_adj),
                             "raw_close": float(valid_raw),
+                            "volume": int(round((volumes[_i] or 0) / 1000.0)) if _i < len(volumes) and volumes[_i] else 0,
                         }
                         # Yahoo 偶爾同一天回傳兩筆 (盤中即時價 + 當日日K)，同日只保留最後一筆
                         if rows and rows[-1]["date"] == dt_str:
@@ -539,6 +553,7 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
                             "date": market_date,
                             "close": round(latest_raw * adj_factor, 2),
                             "raw_close": latest_raw,
+                            "volume": int(round((meta.get("regularMarketVolume") or 0) / 1000.0)),
                         })
                     else:
                         # 最後一筆就是今天：以即時價更新

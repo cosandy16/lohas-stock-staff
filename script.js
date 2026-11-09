@@ -113,70 +113,148 @@ function isBandChannelActive() {
 // ------------------------------------------
 // 🤖 3. 量化自動投資建議計算面板
 // ------------------------------------------
-function updateAdvicePanel(zoneName, r2Value, chipData) {
+// ------------------------------------------
+// 投資建議判斷 (卡片標籤與下方建議面板共用同一套邏輯)
+// 原則：位階為主、籌碼為輔、趨勢過濾；ETF 不採用法人籌碼
+// ------------------------------------------
+const BADGE_STYLE = {
+  red: "background-color: #fee2e2; color: #dc2626; border: 1px solid #fca5a5;",
+  orange: "background-color: #ffedd5; color: #ea580c; border: 1px solid #fdba74;",
+  yellow: "background-color: #fef3c7; color: #d97706; border: 1px solid #fcd34d;",
+  green: "background-color: #d1fae5; color: #059669; border: 1px solid #6ee7b7;"
+};
+
+function isEtfSymbol(symbol) {
+  const code = String(symbol || "").split(".")[0].trim().toUpperCase();
+  return /^00\d/.test(code);
+}
+
+// 籌碼強弱：外資+投信，近 5 日累計；以「占平均成交量比例」判斷是否明顯 (無成交量時退回固定 1000 張)
+function assessChip(last, symbol, chip) {
+  if (isEtfSymbol(symbol)) {
+    return { state: "na", text: "ETF 的法人買賣超多為申購贖回與造市，不納入判斷" };
+  }
+  if (!chip || chip.error) {
+    return { state: "na", text: "尚無法人籌碼資料" };
+  }
+  const has5 = Number.isFinite(chip.total5) && Number(chip.days) >= 3;
+  const foreign = has5 ? (chip.foreign5 || 0) : (chip.foreign || 0);
+  const trust = has5 ? (chip.trust5 || 0) : (chip.trust || 0);
+  const net = foreign + trust;
+  const days = has5 ? Number(chip.days) : 1;
+  const avgVol = Number(last && last.avgVol) || 0;
+  const strong = avgVol > 0 ? Math.abs(net) / (avgVol * days) >= 0.02 : Math.abs(net) >= 1000;
+  const sign = (v) => (v >= 0 ? "+" : "") + v.toLocaleString();
+  const text = `${has5 ? `近 ${days} 日` : "單日"}外資+投信合計 ${sign(net)} 張 (外資 ${sign(foreign)} / 投信 ${sign(trust)})`;
+  let state = "neutral";
+  if (strong && net > 0) state = "strongBuy";
+  else if (strong && net < 0) state = "strongSell";
+  return { state, text, net };
+}
+
+function evaluateAdvice(last, symbol, chip) {
+  const zone = priceZone(last);
+  const r2 = parseFloat(last && last.r2) || 0;
+  const trendUp = (last && Number.isFinite(last.slope)) ? last.slope > 0 : true;
+  const c = assessChip(last, symbol, chip);
+  const chipLine = c.state === "na" ? c.text : c.text;
+
+  const out = (badgeText, badgeKey, panelClass, title, desc) => ({
+    zone, chipState: c.state, badgeText, badgeStyle: BADGE_STYLE[badgeKey], panelClass, title, desc
+  });
+
+  if (r2 < 0.4) {
+    return out("🟡 觀望 / 定額", "yellow", "advice-card advice-warning",
+      "⚠️ 觀望警訊：五線譜擬合度不足 (R² < 0.4)",
+      `當前 R² 僅 ${r2.toFixed(3)}，代表股價走勢較不遵循常態均值回歸規律，建議結合基本面或技術面線型輔助判斷。`);
+  }
+
+  if (zone === "樂觀區上緣") {
+    if (c.state === "strongBuy") {
+      return out("🟠 續抱 / 不追高", "orange", "advice-card advice-sell",
+        "⚠️ 高位留意：位階已極高，法人仍在買超，但不宜追價",
+        `股價已突破【${zone}】(高於 +2SD)，統計上勝率偏低。雖然 ${chipLine}，仍建議持股者設好停利點、未持股者不要追高。`);
+    }
+    return out("🔴 減碼 / 停利", "red", "advice-card advice-sell",
+      "⚠️ 高位警訊：股價已突破樂觀線",
+      `股價已來到【${zone}】(高於 +2SD)，統計上回落機率偏高。籌碼面：${chipLine}。建議持股者分批停利入袋，未持股者切勿追高。`);
+  }
+
+  if (zone === "相對樂觀區") {
+    if (c.state === "strongSell") {
+      return out("🔴 減碼 / 停利", "red", "advice-card advice-sell",
+        "⚠️ 高位警訊：位階偏高 + 法人明顯賣超",
+        `股價位於【${zone}】，且 ${chipLine}，修正拉回風險較大，建議持股者分批獲利入袋，未持股者切勿追高。`);
+    }
+    return out("🟡 觀望 / 不追高", "yellow", "advice-card advice-neutral",
+      "⚖️ 位階偏高：不宜追價，持股可續抱觀察",
+      `股價位於【${zone}】，尚未到極端位置。籌碼面：${chipLine}。未持股者等拉回再考慮，持股者可調升停利點保護利潤。`);
+  }
+
+  if (zone === "中線以上" || zone === "中線以下") {
+    if (c.state === "strongBuy") {
+      return out("🟡 觀望 / 定額", "yellow", "advice-card advice-buy",
+        "⚖️ 區間偏多：中線軌道內 + 法人買超",
+        `股價處於【${zone}】，籌碼面：${chipLine}，偏多但位階不極端，可繼續定期定額，不需追價。`);
+    }
+    if (c.state === "strongSell") {
+      return out("🟡 觀望 / 定額", "yellow", "advice-card advice-neutral",
+        "⚖️ 區間盤整：法人明顯賣超，不宜追高",
+        `股價處於【${zone}】常態軌道內，籌碼面：${chipLine}。未持股者可靜待拉回或等籌碼轉買，持股者可續抱。`);
+    }
+    return out("🟡 觀望 / 定額", "yellow", "advice-card advice-neutral",
+      "⚖️ 區間盤整：常態軌道內合理波動",
+      `股價位於【${zone}】，籌碼面：${chipLine}。適合維持原有的定期定額扣款策略。`);
+  }
+
+  if (zone === "相對悲觀區") {
+    if (c.state === "strongSell") {
+      return out("🟡 等止跌 / 定額", "yellow", "advice-card advice-buy",
+        "🛒 價值浮現：位階偏低，但法人明顯賣超",
+        `股價已進入【${zone}】，中長期價值浮現，惟 ${chipLine}，建議採定期定額，等籌碼止跌轉買再放大部位。`);
+    }
+    if (c.state === "strongBuy") {
+      return out("🟢 分批佈局", "green", "advice-card advice-strong-buy",
+        "🎯 強力觀察：低位階 + 法人買超加持",
+        `股價位於【${zone}】，同時 ${chipLine}。低位階配合籌碼買超，具備較高勝率與報酬比，適合分批佈局。`);
+    }
+    return out("🟢 分批佈局", "green", "advice-card advice-buy",
+      "🛒 價值浮現：位階偏低，可分批佈局",
+      `股價位於【${zone}】，統計上屬偏低區間。籌碼面：${chipLine}。建議分批進場，不要一次投入。`);
+  }
+
+  // 悲觀區下緣
+  if (!trendUp) {
+    return out("🟡 留意趨勢轉折", "yellow", "advice-card advice-warning",
+      "⚠️ 跌破悲觀線，且長期趨勢線向下",
+      `股價已跌至【${zone}】，但迴歸趨勢線斜率向下，低位階可能代表趨勢轉弱而不是便宜。籌碼面：${chipLine}。建議等價格止穩或趨勢轉正再佈局。`);
+  }
+  if (c.state === "strongSell") {
+    return out("🟡 等止跌 / 定額", "yellow", "advice-card advice-buy",
+      "🛒 價值浮現：跌至悲觀區，但法人明顯賣超",
+      `股價已跌至【${zone}】，長期趨勢仍向上，但 ${chipLine}，建議先定期定額，等賣壓減緩再加碼。`);
+  }
+  return out("🟢 加碼 / 佈局", "green", "advice-card advice-strong-buy",
+    "🎯 強力觀察：跌至悲觀區，長期趨勢仍向上",
+    `股價位於【${zone}】，長期趨勢線向上。籌碼面：${chipLine}。統計上屬勝率與報酬比較佳的區間，適合分批加碼。`);
+}
+
+function updateAdvicePanel(last, symbol, chipData) {
   const container = document.getElementById("adviceContainer");
   const titleEl = document.getElementById("adviceTitle");
   const descEl = document.getElementById("adviceDesc");
-
   if (!container || !titleEl || !descEl) return;
-
-  const r2 = parseFloat(r2Value) || 0;
-  const totalChip = typeof chipData === "object" && chipData ? (chipData.total || 0) : (parseInt(chipData) || 0);
-  const foreignChip = typeof chipData === "object" && chipData ? (chipData.foreign || 0) : 0;
-  const trustChip = typeof chipData === "object" && chipData ? (chipData.trust || 0) : 0;
-
-  if (r2 < 0.4) {
-    container.className = "advice-card advice-warning";
-    titleEl.innerHTML = "⚠️ 觀望警訊：五線譜擬合度不足 (R² < 0.4)";
-    descEl.textContent = `當前 R² 僅 ${r2.toFixed(3)}，代表股價走勢較不遵循常態均值回歸規律，建議結合基本面或技術面線型輔助判斷。`;
-    return;
-  }
-
-  const isExpensive = zoneName.includes("樂觀");
-  const isCheap = zoneName.includes("悲觀");
-  const isStrongBuying = totalChip >= 500;
-  const isBuying = totalChip > 0 && totalChip < 500;
-  const isSelling = totalChip < 0 && Math.abs(totalChip) < 500;
-  const isStrongSelling = totalChip <= -500;
-
-  const chipSign = totalChip > 0 ? "+" : "";
-  const chipDescText = `三大法人合計 ${chipSign}${totalChip.toLocaleString()} 張 (外資 ${foreignChip >= 0 ? "+" : ""}${foreignChip} 張 / 投信 ${trustChip >= 0 ? "+" : ""}${trustChip} 張)`;
-
-  if (isExpensive) {
-    container.className = "advice-card advice-sell";
-    if (isStrongSelling || isSelling) {
-      titleEl.innerHTML = "⚠️ 高位警訊：位階偏高 + 法人籌碼調節賣超";
-      descEl.textContent = `股價已來到【${zoneName}】且接近高檔上緣，配合籌碼面上 ${chipDescText}，修正拉回風險較大，建議持股者分批獲利入袋，未持股者切勿追高。`;
-    } else {
-      titleEl.innerHTML = "⚠️ 高位留意：樂觀區宜分批停利 / 謹慎追高";
-      descEl.textContent = `股價已進入【${zoneName}】偏高區間。雖然籌碼尚未大舉拋售 (${chipDescText})，但統計上勝率偏低，建議調升停利點保護利潤。`;
-    }
-  } else if (isCheap) {
-    if (isStrongBuying || isBuying) {
-      container.className = "advice-card advice-strong-buy";
-      titleEl.innerHTML = "🎯 強力觀察：低位階 + 法人買超加持";
-      descEl.textContent = `股價位於【${zoneName}】，同時 ${chipDescText}。低位階配合籌碼買超支撐，具備較高的勝率與潛在報酬比，適合波段分批佈局。`;
-    } else {
-      container.className = "advice-card advice-buy";
-      titleEl.innerHTML = "🛒 價值浮現：位階偏低，但籌碼偏向觀望/賣超";
-      descEl.textContent = `股價已進入【${zoneName}】，中長期投資價值顯現。惟籌碼面上 ${chipDescText} 尚未轉多，建議採取定期定額或等籌碼止跌轉買再放大部位。`;
-    }
-  } else {
-    if (isSelling || isStrongSelling) {
-      container.className = "advice-card advice-neutral";
-      titleEl.innerHTML = "⚖️ 區間盤整：籌碼偏向調節/觀望，不宜追高";
-      descEl.textContent = `當前股價位於【${zoneName}】常態軌道內。由於籌碼面上 ${chipDescText}，法人暫無大舉推升意圖，未持股者建議靜待拉回或等待籌碼轉買；持股者可持續續抱。`;
-    } else if (isBuying || isStrongBuying) {
-      container.className = "advice-card advice-buy";
-      titleEl.innerHTML = "⚖️ 區間偏多：中線軌道內 + 法人籌碼進駐";
-      descEl.textContent = `股價處於【${zoneName}】，搭配籌碼面 ${chipDescText}，短線有突破機會，可適量分批佈局或繼續定期定額扣款。`;
-    } else {
-      container.className = "advice-card advice-neutral";
-      titleEl.innerHTML = "⚖️ 區間盤整：常態軌道內合理波動";
-      descEl.textContent = `當前股價位於【${zoneName}】，籌碼面呈現觀望或極小幅變動 (${chipDescText})。適合維持原有的定期定額扣款策略。`;
-    }
-  }
+  const adv = evaluateAdvice(last, symbol, chipData);
+  container.className = adv.panelClass;
+  titleEl.innerHTML = adv.title;
+  descEl.textContent = adv.desc;
 }
+
+function getActionBadge(item) {
+  const adv = evaluateAdvice(item.last, item.sym, item.chip);
+  return { text: adv.badgeText, style: adv.badgeStyle };
+}
+
 
 // ------------------------------------------
 // 4. 通用工具與計算函式
@@ -250,36 +328,7 @@ function priceZone(p) {
   return "悲觀區下緣";
 }
 
-function getActionBadge(zoneStr, chipData, r2Value) {
-  const r2 = parseFloat(r2Value) || 1;
-  const totalChip = (chipData && !chipData.error) ? (chipData.total || 0) : 0;
 
-  if (r2 < 0.4) {
-    return {
-      text: "🟡 觀望 / 定額",
-      style: "background-color: #fef3c7; color: #d97706; border: 1px solid #fcd34d;"
-    };
-  }
-
-  if ((zoneStr.includes("樂觀") || zoneStr === "中線以上") && totalChip < 0) {
-    return {
-      text: "🔴 減碼 / 停利",
-      style: "background-color: #fee2e2; color: #dc2626; border: 1px solid #fca5a5;"
-    };
-  }
-
-  if ((zoneStr.includes("悲觀") || zoneStr === "中線以下") && totalChip > 0) {
-    return {
-      text: "🟢 加碼 / 佈局",
-      style: "background-color: #d1fae5; color: #059669; border: 1px solid #6ee7b7;"
-    };
-  }
-
-  return {
-    text: "🟡 觀望 / 定額",
-    style: "background-color: #fef3c7; color: #d97706; border: 1px solid #fcd34d;"
-  };
-}
 
 function getPriceRangeDesc(p) {
   if (!p) return "";
@@ -351,7 +400,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
-const WATCHLIST_CACHE_VERSION = "v12";
+const WATCHLIST_CACHE_VERSION = "v13";
 
 function loadWatchlistFromCache() {
   // 舊版程式存下的快取 (漲跌、PE、殖利率可能是錯的) 直接丟棄
@@ -511,6 +560,9 @@ function buildAnalysis(data, currentMode = (modelMode ? modelMode.value : "linea
   const bandData = calculateBandChannel(points, 20, 14, 2);
 
   const fit = regression(points);
+  // 近 20 個交易日平均成交量 (張，不含最後一筆即時資料)，供籌碼強弱判斷用
+  const volWindow = filtered.slice(-21, -1).map(p => Number(p.volume) || 0).filter(v => v > 0);
+  const avgVol = volWindow.length ? volWindow.reduce((a, b) => a + b, 0) / volWindow.length : 0;
   return points.map((p, idx) => {
     const midRaw = fit.intercept + fit.slope * p.x;
     const conv = (v) => useLog ? Math.exp(v) : v;
@@ -522,6 +574,8 @@ function buildAnalysis(data, currentMode = (modelMode ? modelMode.value : "linea
       minus1: conv(midRaw - fit.sd),
       minus2: conv(midRaw - fit.sd * 2),
       r2: fit.r2,
+      slope: fit.slope,
+      avgVol,
       // 疊加樂活通道指標
       bandMid: bandData[idx].bandMid,
       bandUpper: bandData[idx].bandUpper,
@@ -715,7 +769,7 @@ function render() {
     if (peText) peText.textContent = Number.isFinite(currentFundamentals.pe) ? `${currentFundamentals.pe.toFixed(1)} 倍` : "N/A";
     if (yieldText) yieldText.textContent = fmtYield(currentFundamentals.yield);
 
-    updateAdvicePanel(zoneStr, last.r2, currentMainChipData);
+    updateAdvicePanel(last, symbolInput ? symbolInput.value.trim() : "", currentMainChipData);
     renderChart(analysis);
 
     if (levelsTable) {
@@ -926,7 +980,7 @@ function updateWatchlistDisplay() {
     const nearest = getNearestLevel(item.last);
     const nearestHint = formatNearestText(nearest);
     const displayName = item.name || getStockName(item.sym) || "";
-    const badge = getActionBadge(priceZone(item.last), item.chip, item.last.r2);
+    const badge = getActionBadge(item);
 
     const priceChange = Number.isFinite(item.change) && Number.isFinite(item.changePct);
     const changeColor = !priceChange || item.change === 0 ? "#667085" : (item.change > 0 ? "#c94b4b" : "#1f8a63");
