@@ -382,24 +382,45 @@ def load_daily_quotes():
     return result or DAILY_CACHE["data"]
 
 def official_previous_close(symbol, rows):
-    """以官方資料求前一交易日收盤價；對不上最新交易日時回傳 None"""
+    """以官方資料求前一交易日收盤價；無法判斷時回傳 None"""
     if not rows:
         return None
     q = load_daily_quotes().get(symbol.split(".")[0].strip().upper())
     if not q:
+        print(f"ℹ️ [{symbol}] 官方每日收盤查無資料，改用 Yahoo 歷史序列算昨收")
         return None
+
     last_date = rows[-1]["date"]
     last_price = rows[-1]["raw_close"]
-    q_date = q["date"]
+    q_close, q_change, q_date = q["close"], q["change"], q["date"]
+    if not last_price or last_price <= 0:
+        return None
 
-    # 官方資料就是最新交易日：昨收 = 收盤 - 漲跌價差
-    if (q_date == last_date) or (q_date is None and last_price and abs(q["close"] - last_price) / last_price < 0.002):
-        prev = q["close"] - q["change"]
-        return round(prev, 4) if prev > 0 else None
-    # 盤中：官方資料還停在上一個交易日，其收盤價即為昨收
-    if q_date and q_date < last_date:
-        return q["close"]
-    return None
+    def done(prev, how):
+        print(f"✅ [{symbol}] 昨收 {prev} (官方資料: {how}; 官方收盤 {q_close}, 漲跌 {q_change})")
+        return prev
+
+    # 官方資料有日期
+    if q_date:
+        if q_date == last_date:                      # 官方已是最新交易日
+            prev = round(q_close - q_change, 4)
+            return done(prev, "今日") if prev > 0 else None
+        if q_date < last_date:                       # 官方還停在上一個交易日
+            return done(q_close, "昨日")
+        return None
+
+    # 官方資料沒有日期 (證交所 STOCK_DAY_ALL)：用價格判斷是今天還是昨天的資料
+    diff = abs(q_close - last_price) / last_price
+    if diff >= 0.002:
+        # 與最新價差很多 → 官方還沒更新今天，其收盤價就是昨收 (漲跌停上限 10%)
+        if abs(last_price - q_close) / q_close < 0.12:
+            return done(q_close, "昨日(尚未更新今日)")
+        return None
+    # 與最新價幾乎相同：可能是今天已更新，也可能是平盤，用 Yahoo 倒數第二筆輔助判斷
+    if len(rows) > 1 and abs(rows[-2]["raw_close"] - q_close) / q_close < 0.002:
+        return done(q_close, "昨日(平盤)")
+    prev = round(q_close - q_change, 4)
+    return done(prev, "今日") if prev > 0 else None
 
 def build_fundamentals(symbol, rows, ttm_dividend):
     """官方 PE/殖利率優先；ETF 等官方沒有殖利率時，以近 12 個月配息 ÷ 現價估算"""
