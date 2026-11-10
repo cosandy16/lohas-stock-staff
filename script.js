@@ -401,7 +401,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
-const WATCHLIST_CACHE_VERSION = "v14";
+const WATCHLIST_CACHE_VERSION = "v15";
 
 function loadWatchlistFromCache() {
   // 舊版程式存下的快取 (漲跌、PE、殖利率可能是錯的) 直接丟棄
@@ -978,10 +978,10 @@ function updateWatchlistDisplay() {
       const colorOf = (v) => v > 0 ? "#c94b4b" : (v < 0 ? "#1f8a63" : "inherit");
       const signOf = (v) => v > 0 ? "+" : "";
       if (Number.isFinite(cs.net)) {
-        chipSummary = `${cs.label}: <strong style="color:${colorOf(cs.net)}">${signOf(cs.net)}${cs.net.toLocaleString()} 張</strong>`;
+        chipSummary = `<span style="display:inline-block; white-space:nowrap;">${cs.label}: <strong style="color:${colorOf(cs.net)}">${signOf(cs.net)}${cs.net.toLocaleString()} 張</strong></span>`;
         const todayTotal = item.chip.total;
         if (Number.isFinite(todayTotal) && Number.isFinite(item.chip.total5)) {
-          chipSummary += ` <span style="color:#94a3b8; font-size:0.9em;">(今日三大法人 ${signOf(todayTotal)}${todayTotal.toLocaleString()})</span>`;
+          chipSummary += ` <span style="display:inline-block; white-space:nowrap; color:#94a3b8; font-size:0.9em;">(今日合計 ${signOf(todayTotal)}${todayTotal.toLocaleString()})</span>`;
         }
       }
     }
@@ -999,7 +999,7 @@ function updateWatchlistDisplay() {
       : "漲跌幅：資料不足";
 
     card.innerHTML = `
-      <div>
+      <div style="flex: 1 1 150px; min-width: 0;">
         <strong>${item.sym}</strong>${displayName ? `<span style="color:#555; font-size:0.85em; margin-left:6px; font-weight:600;">${displayName}</span>` : ""}<br>
         <small style="color:${smallTextColor}; display: block; margin-top: 4px; line-height: 1.5;">
           <span style="white-space: nowrap;">現價: ${formatPrice(item.last.raw_close || item.last.close)}</span>
@@ -1009,15 +1009,15 @@ function updateWatchlistDisplay() {
           <br>
           <span style="display:inline-block; white-space: nowrap; margin-right: 14px;">PE: ${peDisp}</span><span style="display:inline-block; white-space: nowrap;">殖利率: ${yieldDisp}</span>
           <br>
-          <span style="white-space: nowrap;">${chipSummary}</span>
+          <span>${chipSummary}</span>
         </small>
       </div>
-      <div style="text-align:right;">
-        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-bottom: 2px;">
-          <span style="font-size: 0.72rem; font-weight: bold; padding: 2px 8px; border-radius: 12px; ${badge.style}">
+      <div style="flex: 1 1 150px; min-width: 0; text-align:right;">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 6px; margin-bottom: 2px;">
+          <span style="font-size: 0.72rem; font-weight: bold; padding: 2px 8px; border-radius: 12px; white-space: nowrap; ${badge.style}">
             ${badge.text}
           </span>
-          <span style="font-weight:900; color:${zoneColor}">${priceZone(item.last)}</span>
+          <span style="font-weight:900; white-space: nowrap; color:${zoneColor}">${priceZone(item.last)}</span>
         </div>
         <small style="color:${smallTextColor}">區間: ${getPriceRangeDesc(item.last)}</small>
         <br>
