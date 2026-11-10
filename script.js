@@ -389,16 +389,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   loadWatchlistFromCache();
   bindEvents();
-
-  // 開啟頁面時：快取超過 30 分鐘 (或沒有快取) 才自動更新一次，否則沿用快取，可隨時手動按「執行批量掃描更新」
-  const AUTO_REFRESH_MINUTES = 30;
-  if (watchlistInput && watchlistInput.value.trim() && btnWatchlist) {
-    const lastScan = Number(localStorage.getItem("lohas_watchlist_last_scan_ts")) || 0;
-    const ageMin = (Date.now() - lastScan) / 60000;
-    if (!scannedWatchlistCache.length || ageMin > AUTO_REFRESH_MINUTES) {
-      setTimeout(() => btnWatchlist.click(), 500);
-    }
-  }
 });
 
 const WATCHLIST_CACHE_VERSION = "v15";
