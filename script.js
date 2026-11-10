@@ -131,26 +131,30 @@ function isEtfSymbol(symbol) {
 
 // 籌碼強弱：外資+投信，近 5 日累計；以「占平均成交量比例」判斷是否明顯 (無成交量時退回固定 1000 張)
 function assessChip(last, symbol, chip) {
-  if (isEtfSymbol(symbol)) {
-    return { state: "na", text: "ETF 的法人買賣超多為申購贖回與造市，不納入判斷" };
-  }
+  const isEtf = isEtfSymbol(symbol);
   if (!chip || chip.error) {
-    return { state: "na", text: "尚無法人籌碼資料" };
+    return { state: "na", text: isEtf ? "ETF 的法人買賣超多為申購贖回與造市，不納入判斷" : "尚無法人籌碼資料", isEtf };
   }
   const has5 = Number.isFinite(chip.total5) && Number(chip.days) >= 3;
   const foreign = has5 ? (chip.foreign5 || 0) : (chip.foreign || 0);
   const trust = has5 ? (chip.trust5 || 0) : (chip.trust || 0);
   const net = foreign + trust;
   const days = has5 ? Number(chip.days) : 1;
+  const label = `${has5 ? `近 ${days} 日` : "單日"}外資+投信`;
+  const sign = (v) => (v >= 0 ? "+" : "") + v.toLocaleString();
+  const text = `${label}合計 ${sign(net)} 張 (外資 ${sign(foreign)} / 投信 ${sign(trust)})`;
+
+  // ETF：只顯示數字供參考，不納入判斷 (申購贖回與造市會讓買賣超失真)
+  if (isEtf) {
+    return { state: "na", text: "ETF 的法人買賣超多為申購贖回與造市，不納入判斷", net, label, isEtf };
+  }
+
   const avgVol = Number(last && last.avgVol) || 0;
   const strong = avgVol > 0 ? Math.abs(net) / (avgVol * days) >= 0.02 : Math.abs(net) >= 1000;
-  const sign = (v) => (v >= 0 ? "+" : "") + v.toLocaleString();
-  const label = `${has5 ? `近 ${days} 日` : "單日"}外資+投信`;
-  const text = `${label}合計 ${sign(net)} 張 (外資 ${sign(foreign)} / 投信 ${sign(trust)})`;
   let state = "neutral";
   if (strong && net > 0) state = "strongBuy";
   else if (strong && net < 0) state = "strongSell";
-  return { state, text, net, label };
+  return { state, text, net, label, isEtf };
 }
 
 function evaluateAdvice(last, symbol, chip) {
@@ -961,7 +965,7 @@ function updateWatchlistDisplay() {
     const yieldDisp = fmtYield(item.fundamentals && item.fundamentals.yield, 2);
 
     let chipSummary = '<span style="color:#94a3b8;">無籌碼資料</span>';
-    if (isEtfSymbol(item.sym)) {
+    if (isEtfSymbol(item.sym) && !(item.chip && !item.chip.error)) {
       chipSummary = '<span style="color:#94a3b8;">法人籌碼：ETF 不計入判斷</span>';
     } else if (item.chip && !item.chip.error) {
       const cs = assessChip(item.last, item.sym, item.chip);
@@ -972,6 +976,9 @@ function updateWatchlistDisplay() {
         const todayTotal = item.chip.total;
         if (Number.isFinite(todayTotal) && Number.isFinite(item.chip.total5)) {
           chipSummary += ` <span style="display:inline-block; white-space:nowrap; color:#94a3b8; font-size:0.9em;">(今日合計 ${signOf(todayTotal)}${todayTotal.toLocaleString()})</span>`;
+        }
+        if (cs.isEtf) {
+          chipSummary += ' <span style="display:inline-block; white-space:nowrap; color:#94a3b8; font-size:0.85em;">· ETF 僅供參考，不計入判斷</span>';
         }
       }
     }
