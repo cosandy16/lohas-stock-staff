@@ -981,9 +981,6 @@ function updateWatchlistDisplay() {
         if (Number.isFinite(todayTotal) && Number.isFinite(item.chip.total5)) {
           chipSummary += ` <span style="display:inline-block; white-space:nowrap; color:#94a3b8; font-size:0.9em;">(今日合計 ${signOf(todayTotal)}${todayTotal.toLocaleString()})</span>`;
         }
-        if (cs.isEtf) {
-          chipSummary += ' <span style="display:inline-block; white-space:nowrap; color:#94a3b8; font-size:0.85em;">· ETF 僅供參考，不計入判斷</span>';
-        }
       }
     }
 
