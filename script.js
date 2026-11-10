@@ -1000,7 +1000,6 @@ function updateWatchlistDisplay() {
         <strong>${item.sym}</strong>${displayName ? `<span style="color:#555; font-size:0.85em; margin-left:6px; font-weight:600;">${displayName}</span>` : ""}<br>
         <small style="color:${smallTextColor}; display: block; margin-top: 4px; line-height: 1.5;">
           <span style="white-space: nowrap;">現價: ${formatPrice(item.last.raw_close || item.last.close)}</span>
-          <span style="white-space: nowrap;">(還原: ${formatPrice(item.last.close)})</span>
           <br>
           <span style="white-space: nowrap; color:${changeColor}; font-weight:900;">${changeText}</span>
           <br>
