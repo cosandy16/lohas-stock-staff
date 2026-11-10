@@ -1000,7 +1000,7 @@ function updateWatchlistDisplay() {
       : "漲跌幅：資料不足";
 
     card.innerHTML = `
-      <div style="flex: 1 1 150px; min-width: 0;">
+      <div style="flex: 1 1 52%; min-width: 0;">
         <strong>${item.sym}</strong>${displayName ? `<span style="color:#555; font-size:0.85em; margin-left:6px; font-weight:600;">${displayName}</span>` : ""}<br>
         <small style="color:${smallTextColor}; display: block; margin-top: 4px; line-height: 1.5;">
           <span style="white-space: nowrap;">現價: ${formatPrice(item.last.raw_close || item.last.close)}</span>
@@ -1012,7 +1012,7 @@ function updateWatchlistDisplay() {
           <span>${chipSummary}</span>
         </small>
       </div>
-      <div style="flex: 1 1 150px; min-width: 0; text-align:right;">
+      <div style="flex: 1 1 48%; min-width: 0; text-align:right;">
         <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 6px; margin-bottom: 2px;">
           <span style="font-size: 0.72rem; font-weight: bold; padding: 2px 8px; border-radius: 12px; white-space: nowrap; ${badge.style}">
             ${badge.text}
