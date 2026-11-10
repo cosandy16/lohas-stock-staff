@@ -11,7 +11,7 @@ from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-SERVER_VERSION = "fixed13"
+SERVER_VERSION = "fixed19"
 PREV_SOURCE = {}
 ROOT = Path(__file__).resolve().parent
 HOST = os.environ.get("HOST", "0.0.0.0")
@@ -445,6 +445,8 @@ def build_fundamentals(symbol, rows, ttm_dividend):
         if price and price > 0:
             f["yield"] = round(ttm_dividend / price * 100, 2)
             f["yield_source"] = "ttm"
+    # 官方沒有殖利率，且 Yahoo 近 12 個月也沒有任何配息紀錄 (例如剛上市、尚未配息的 ETF)
+    f["no_dividend"] = bool(f.get("yield") is None and rows and not ttm_dividend)
     return f
 
 # ---------------------------------------------------------

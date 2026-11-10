@@ -762,7 +762,9 @@ function render() {
     if (rangeText) rangeText.textContent = getPriceRangeDesc(last);
     
     if (peText) peText.textContent = Number.isFinite(currentFundamentals.pe) ? `${currentFundamentals.pe.toFixed(1)} 倍` : "N/A";
-    if (yieldText) yieldText.textContent = fmtYield(currentFundamentals.yield);
+    if (yieldText) yieldText.textContent = (currentFundamentals.yield == null && currentFundamentals.no_dividend)
+      ? "近12月無配息"
+      : fmtYield(currentFundamentals.yield);
 
     updateAdvicePanel(last, symbolInput ? symbolInput.value.trim() : "", currentMainChipData);
     renderChart(analysis);
@@ -962,7 +964,9 @@ function updateWatchlistDisplay() {
     const smallTextColor = (isBuySignal || isSellSignal) ? '#333333' : '#666666';
 
     const peDisp = fmtPe(item.fundamentals && item.fundamentals.pe);
-    const yieldDisp = fmtYield(item.fundamentals && item.fundamentals.yield, 2);
+    const yieldDisp = (item.fundamentals && item.fundamentals.yield == null && item.fundamentals.no_dividend)
+      ? "近12月無配息"
+      : fmtYield(item.fundamentals && item.fundamentals.yield, 2);
 
     let chipSummary = '<span style="color:#94a3b8;">無籌碼資料</span>';
     if (isEtfSymbol(item.sym) && !(item.chip && !item.chip.error)) {
