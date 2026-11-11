@@ -168,6 +168,21 @@ function evaluateAdvice(last, symbol, chip) {
     zone, chipState: c.state, badgeText, badgeStyle: BADGE_STYLE[badgeKey], panelClass, title, desc
   });
 
+  // 樂活通道 (20 週均線 ± 2σ)：跌破下軌 → 暫停買進 / 止扣；回到下軌之上 → 回補
+  if (last && last.bandState === "below") {
+    return out("🟡 暫停買進 / 止扣", "yellow", "advice-card advice-warning",
+      "⏸️ 跌破樂活通道下軌：暫停買進，定期定額止扣",
+      `股價 ${formatPrice(last.close)} 低於週線通道下軌 ${formatPrice(last.bandLower)}，已連續約 ${last.pauseDays} 個交易日。` +
+      `依樂活通道方法，此時暫停定期定額與單筆加碼，等股價回到下軌之上 (重回常態分布) 再恢復，並一次補回停扣的期數。五線譜位階：【${zone}】。`);
+  }
+  if (last && last.bandState === "recovered") {
+    const months = last.pauseDays / 21;
+    const approx = months >= 1 ? `約 ${months.toFixed(1)} 個月` : `約 ${last.pauseDays} 個交易日`;
+    return out("🟢 回補", "green", "advice-card advice-buy",
+      "▶️ 重回樂活通道：可恢復買進並回補停扣期數",
+      `股價自通道下軌之下回到通道內 (前一段停扣${approx})。依樂活通道方法，可恢復定期定額，並一次補買停扣的期數；單筆加碼則補上先前暫停的加碼比例。五線譜位階：【${zone}】。`);
+  }
+
   if (r2 < 0.4) {
     return out("🟡 觀望 / 定額", "yellow", "advice-card advice-warning",
       "⚠️ 觀望警訊：五線譜擬合度不足 (R² < 0.4)",
@@ -482,33 +497,72 @@ function calculateATR(data, period = 14) {
   return atr;
 }
 
-// 🔹 樂活通道關鍵：20SMA 中軌與上下軌 (20SMA ± 2 * ATR) 計算
-function calculateBandChannel(data, smaPeriod = 20, atrPeriod = 14, multiplier = 2) {
-  const atrValues = calculateATR(data, atrPeriod);
-  
-  return data.map((p, index) => {
-    let sma20 = p.close;
-    if (index >= smaPeriod - 1) {
-      let sum = 0;
-      for (let i = index - smaPeriod + 1; i <= index; i++) {
-        sum += data[i].close;
-      }
-      sma20 = sum / smaPeriod;
-    } else {
-      let sum = 0;
-      for (let i = 0; i <= index; i++) {
-        sum += data[i].close;
-      }
-      sma20 = sum / (index + 1);
-    }
+// 🔹 樂活通道：週線版 (20 週均線 ± 2 倍標準差，即週線布林通道)
+//    中軌 = 過去 20 週收盤價平均；上軌/下軌 = 中軌 ± 2σ (母體標準差)
+//    每個交易日的值 = 「該日之前已完成的各週收盤」+「當日 (本週最新) 收盤」共 20 週計算
+function calculateBandChannel(data, weeks = 20, multiplier = 2) {
+  if (!data || !data.length) return [];
 
-    const currentATR = atrValues[index] || 0;
+  // 以週一為一週的起點，替每筆資料標上週序號
+  const weekKeyOf = (dateStr) => {
+    const d = new Date(dateStr + "T00:00:00Z");
+    const dow = (d.getUTCDay() + 6) % 7; // 週一=0
+    return d.getTime() - dow * 86400000;
+  };
+  const weekIdx = [];
+  const weekLastClose = []; // 每週最後一個交易日的收盤
+  let prevKey = null;
+  data.forEach((p, i) => {
+    const key = weekKeyOf(String(p.date).slice(0, 10));
+    if (key !== prevKey) { weekLastClose.push(p.close); prevKey = key; }
+    else { weekLastClose[weekLastClose.length - 1] = p.close; }
+    weekIdx.push(weekLastClose.length - 1);
+  });
+
+  return data.map((p, i) => {
+    const w = weekIdx[i];
+    const closes = [];
+    for (let k = Math.max(0, w - (weeks - 1)); k < w; k++) closes.push(weekLastClose[k]);
+    closes.push(p.close); // 本週用當日最新收盤
+    const n = closes.length;
+    const mean = closes.reduce((s, v) => s + v, 0) / n;
+    const variance = closes.reduce((s, v) => s + (v - mean) * (v - mean), 0) / n;
+    const sd = Math.sqrt(variance);
     return {
-      bandMid: sma20,
-      bandUpper: sma20 + multiplier * currentATR,
-      bandLower: sma20 - multiplier * currentATR
+      bandMid: mean,
+      bandUpper: mean + multiplier * sd,
+      bandLower: mean - multiplier * sd,
+      bandWeeks: n
     };
   });
+}
+
+// 🔹 通道狀態：跌破下軌 → 暫停買進；回到下軌之上 → 回補
+function computeBandState(rows) {
+  const n = rows.length;
+  const last = rows[n - 1];
+  const empty = { bandState: "none", pauseDays: 0 };
+  if (n < 60 || !last || !(last.bandWeeks >= 20)) return empty; // 週數不足 20 不判斷
+  const below = (r) => r.bandLower != null && r.close < r.bandLower;
+
+  const runLenEndingAt = (idx) => {
+    let c = 0;
+    for (let i = idx; i >= 0 && below(rows[i]); i--) c++;
+    return c;
+  };
+
+  if (below(last)) return { bandState: "below", pauseDays: runLenEndingAt(n - 1) };
+
+  // 找最近一次在下軌之下的日子 (回補期：回到通道內 10 個交易日內)
+  let k = -1;
+  for (let i = n - 2; i >= Math.max(0, n - 12); i--) {
+    if (below(rows[i])) { k = i; break; }
+  }
+  if (k >= 0) {
+    const run = runLenEndingAt(k);
+    if (run >= 3) return { bandState: "recovered", pauseDays: run, daysSince: n - 1 - k };
+  }
+  return empty;
 }
 
 function regression(values) {
@@ -552,13 +606,15 @@ function buildAnalysis(data, currentMode = (modelMode ? modelMode.value : "linea
     y: useLog ? Math.log(p.close) : p.close
   }));
 
-  const bandData = calculateBandChannel(points, 20, 14, 2);
+  // 週線通道用全部資料計算 (避免分析年限較短時，起點附近的週數不足)，再取對應的尾段
+  const bandAll = calculateBandChannel(data, 20, 2);
+  const bandData = bandAll.slice(bandAll.length - points.length);
 
   const fit = regression(points);
   // 近 20 個交易日平均成交量 (張，不含最後一筆即時資料)，供籌碼強弱判斷用
   const volWindow = filtered.slice(-21, -1).map(p => Number(p.volume) || 0).filter(v => v > 0);
   const avgVol = volWindow.length ? volWindow.reduce((a, b) => a + b, 0) / volWindow.length : 0;
-  return points.map((p, idx) => {
+  const analysisRows = points.map((p, idx) => {
     const midRaw = fit.intercept + fit.slope * p.x;
     const conv = (v) => useLog ? Math.exp(v) : v;
     return {
@@ -574,9 +630,13 @@ function buildAnalysis(data, currentMode = (modelMode ? modelMode.value : "linea
       // 疊加樂活通道指標
       bandMid: bandData[idx].bandMid,
       bandUpper: bandData[idx].bandUpper,
-      bandLower: bandData[idx].bandLower
+      bandLower: bandData[idx].bandLower,
+      bandWeeks: bandData[idx].bandWeeks
     };
   });
+  // 最新一筆附上通道狀態 (暫停買進 / 回補)，供建議標籤使用
+  Object.assign(analysisRows[analysisRows.length - 1], computeBandState(analysisRows));
+  return analysisRows;
 }
 
 // ------------------------------------------
@@ -709,7 +769,7 @@ function renderChart(analysis) {
             <div><span>估計殖利率:</span><strong style="color:var(--green);">${histYield}</strong></div>
             ${isBandActive ? `
               <div style="border-top:1px dashed rgba(255,255,255,0.2); margin-top:4px; padding-top:4px; color:#f43f5e;"><span>通道上軌:</span><span>${formatPrice(point.bandUpper)}</span></div>
-              <div style="color:#f59e0b;"><span>20SMA中軌:</span><span>${formatPrice(point.bandMid)}</span></div>
+              <div style="color:#f59e0b;"><span>20週均線中軌:</span><span>${formatPrice(point.bandMid)}</span></div>
               <div style="color:#10b981;"><span>通道下軌:</span><span>${formatPrice(point.bandLower)}</span></div>
             ` : ''}
             <div style="border-top:1px dashed rgba(255,255,255,0.15); margin-top:4px; padding-top:4px;"><span>+2SD 樂觀:</span><span>${formatPrice(point.plus2)}</span></div>
