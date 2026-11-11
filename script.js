@@ -925,10 +925,17 @@ function updateWatchlistDisplay() {
 
   resultList.sort((a, b) => {
     if (sortMode === "code") return a.sym.localeCompare(b.sym);
-    if (sortMode === "rankAsc") return getZoneWeight(priceZone(a.last)) - getZoneWeight(priceZone(b.last));
-    if (sortMode === "rankDesc") return getZoneWeight(priceZone(b.last)) - getZoneWeight(priceZone(a.last));
-    if (sortMode === "nearAsc") return getNearestDistance(a.last) - getNearestDistance(b.last);
-    if (sortMode === "nearDesc") return getNearestDistance(b.last) - getNearestDistance(a.last);
+    // 同位階內：離最近一條線越近的排越前面，距離相同再依代號
+    const sameZoneTie = (x, y) =>
+      (getNearestDistance(x.last) - getNearestDistance(y.last)) || x.sym.localeCompare(y.sym);
+    if (sortMode === "rankAsc") {
+      return (getZoneWeight(priceZone(a.last)) - getZoneWeight(priceZone(b.last))) || sameZoneTie(a, b);
+    }
+    if (sortMode === "rankDesc") {
+      return (getZoneWeight(priceZone(b.last)) - getZoneWeight(priceZone(a.last))) || sameZoneTie(a, b);
+    }
+    if (sortMode === "nearAsc") return (getNearestDistance(a.last) - getNearestDistance(b.last)) || a.sym.localeCompare(b.sym);
+    if (sortMode === "nearDesc") return (getNearestDistance(b.last) - getNearestDistance(a.last)) || a.sym.localeCompare(b.sym);
     return 0;
   });
 
