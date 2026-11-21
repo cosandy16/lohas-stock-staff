@@ -398,7 +398,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const savedLastSymbol = localStorage.getItem("lohas_last_symbol");
   const savedLastMarket = localStorage.getItem("lohas_last_market");
   if (savedLastSymbol && symbolInput) symbolInput.value = savedLastSymbol;
-  if (savedLastMarket && market) market.value = savedLastMarket;
+  // 市場改為自動判斷，不再還原舊的手動選擇
 
   updateRemoveSelect();
 

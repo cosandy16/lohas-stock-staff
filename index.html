@@ -219,13 +219,8 @@
       <div class="form-group">
         <label>市場／標的</label>
         <div style="display:flex; gap:6px;">
-          <select id="market" style="width: 35%;">
-            <option value="auto">自動判斷</option>
-            <option value="tw">台股上市</option>
-            <option value="two">台股上櫃</option>
-            <option value="us">美股/ETF</option>
-          </select>
-          <input type="text" id="symbolInput" placeholder="例如: 2330 或 AAPL" value="2330">
+          <select id="market" style="display:none;"><option value="auto">自動判斷</option></select>
+          <input type="text" id="symbolInput" placeholder="例如: 2330、00878、AAPL、BRK.B" style="flex:1;" value="2330">
         </div>
       </div>
 
