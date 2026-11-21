@@ -13,6 +13,7 @@ from pathlib import Path
 
 SERVER_VERSION = "fixed19"
 PREV_SOURCE = {}
+EX_INFO = {}   # {代號: {"cash": 現金股利, "split": 無償配股比, "ref": 除權息參考價}}（僅當天除權息時有值）
 ROOT = Path(__file__).resolve().parent
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8769"))
@@ -479,7 +480,7 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
             period1 = int(time.mktime(start_dt.timetuple()))
             period2 = int(time.mktime((end_dt + timedelta(days=2)).timetuple()))
 
-            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?period1={period1}&period2={period2}&interval=1d&events=div"
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?period1={period1}&period2={period2}&interval=1d&events=div,split"
             req = urllib.request.Request(
                 url,
                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
@@ -590,6 +591,43 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
                 previous_close = rows[-2]["raw_close"] if len(rows) > 1 else None
                 PREV_SOURCE[_code] = "Yahoo歷史(備援)"
 
+            # 除權息當天：漲跌必須以「除權息參考價」為基準，不能直接用昨收
+            # 參考價 = (昨收 - 現金股利) / (1 + 無償配股率)
+            EX_INFO.pop(_code, None)
+            try:
+                gmt = meta.get("gmtoffset", 28800)
+                today_str = rows[-1]["date"]
+                events = result.get("events", {}) or {}
+
+                def _ev_date(ev):
+                    return datetime.datetime.utcfromtimestamp(ev["date"] + gmt).date().isoformat()
+
+                cash = sum(float(d.get("amount") or 0) for d in (events.get("dividends", {}) or {}).values()
+                           if d.get("date") is not None and _ev_date(d) == today_str)
+                split_factor = 1.0
+                for sp in (events.get("splits", {}) or {}).values():
+                    if sp.get("date") is not None and _ev_date(sp) == today_str:
+                        num, den = float(sp.get("numerator") or 1), float(sp.get("denominator") or 1)
+                        if den > 0 and num > 0:
+                            split_factor *= num / den
+                if (cash > 0 or abs(split_factor - 1) > 1e-9) and len(rows) > 1:
+                    actual_prev = rows[-2]["raw_close"]
+                    official_already_ref = (
+                        PREV_SOURCE.get(_code) == "官方今日"
+                        and previous_close is not None
+                        and abs(previous_close - actual_prev) > 0.005
+                    )
+                    if not official_already_ref:
+                        ref = round((actual_prev - cash) / split_factor, 2)
+                        if ref > 0:
+                            previous_close = ref
+                            PREV_SOURCE[_code] = "除權息參考價(Yahoo)"
+                            EX_INFO[_code] = {"cash": round(cash, 4), "split": round(split_factor, 6), "ref": ref}
+                    else:
+                        EX_INFO[_code] = {"cash": round(cash, 4), "split": round(split_factor, 6), "ref": previous_close}
+            except Exception as e:
+                print(f"⚠️ 除權息參考價計算失敗: {e}")
+
             # 近 12 個月配息總和 (Yahoo events=div，ETF 沒有官方殖利率時用來計算)
             ttm_dividend = 0.0
             try:
@@ -674,6 +712,7 @@ class Handler(BaseHTTPRequestHandler):
                         "rows": data,
                         "previous_close": previous_close,
                         "prev_source": PREV_SOURCE.get(actual_symbol.split(".")[0].strip().upper(), ""),
+                        "ex_info": EX_INFO.get(actual_symbol.split(".")[0].strip().upper()),
                         "server_version": SERVER_VERSION,
                     },
                 )

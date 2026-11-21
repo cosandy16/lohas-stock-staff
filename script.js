@@ -936,6 +936,7 @@ async function fetchLevelForWatchlist(symbol) {
     fundamentals: json.fundamentals || { pe: null, yield: null },
     prevClose: previousPrice,
     prevSource: json.prev_source || "(舊版server)",
+    exInfo: json.ex_info || null,
     serverVersion: json.server_version || "舊版"
   };
 }
@@ -1062,6 +1063,9 @@ function updateWatchlistDisplay() {
     const changeText = priceChange
       ? `${changeArrow} ${item.change > 0 ? "+" : ""}${item.change.toFixed(2)} (${item.changePct > 0 ? "+" : ""}${item.changePct.toFixed(2)}%)`
       : "漲跌幅：資料不足";
+    const exTag = item.exInfo
+      ? ` <span style="font-weight:600; color:#b7791f;">(除${item.exInfo.cash > 0 ? "息" + item.exInfo.cash : ""}${item.exInfo.split && Math.abs(item.exInfo.split - 1) > 1e-9 ? "權" : ""}，參考價 ${item.exInfo.ref})</span>`
+      : "";
 
     card.innerHTML = `
       <div style="flex: 1 1 52%; min-width: 0;">
@@ -1069,7 +1073,7 @@ function updateWatchlistDisplay() {
         <small style="color:${smallTextColor}; display: block; margin-top: 4px; line-height: 1.5;">
           <span style="white-space: nowrap;">現價: ${formatPrice(item.last.raw_close || item.last.close)}</span>
           <br>
-          <span style="white-space: nowrap; color:${changeColor}; font-weight:900;">${changeText}</span>
+          <span style="white-space: nowrap; color:${changeColor}; font-weight:900;">${changeText}${exTag}</span>
           <br>
           <span style="display:inline-block; white-space: nowrap; margin-right: 14px;">PE: ${peDisp}</span><span style="display:inline-block; white-space: nowrap;">殖利率: ${yieldDisp}</span>
           <br>
