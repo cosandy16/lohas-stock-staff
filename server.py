@@ -462,9 +462,12 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
     sym = raw_symbol.strip().upper()
     symbols_to_try = []
 
-    if "." in sym:
+    if re.search(r"\.(TW|TWO)$", sym):
         symbols_to_try.append(sym)
-    elif re.match(r"^\d+$", sym):
+    elif "." in sym:
+        # 美股類別股 (BRK.B、BF.B)：Yahoo 代號用連字號，先試 BRK-B，再退回原字串
+        symbols_to_try = [sym.replace(".", "-"), sym]
+    elif re.match(r"^\d{4,6}[A-Z]?$", sym):   # 台股代號：2330、00878、00981A、00937B
         if market == "two":
             symbols_to_try = [f"{sym}.TWO", f"{sym}.TW"]
         else:
@@ -562,6 +565,19 @@ def fetch_yahoo_symbol_with_retry(raw_symbol, market, years_str):
                         # 最後一筆就是今天：以即時價更新
                         last_row["raw_close"] = latest_raw
                         last_row["close"] = round(last_row["close"] * ratio, 2)
+
+            # 標記盤中未完成的最後一筆：前端畫五線譜時排除它，避免每次載入線圖飄動
+            try:
+                if rows:
+                    reg = (meta.get("currentTradingPeriod") or {}).get("regular") or {}
+                    t0, t1 = reg.get("start"), reg.get("end")
+                    gmt = meta.get("gmtoffset", 28800)
+                    now_ts = time.time()
+                    today_local = datetime.datetime.utcfromtimestamp(now_ts + gmt).date().isoformat()
+                    if t0 and t1 and t0 <= now_ts < t1 and rows[-1]["date"] == today_local:
+                        rows[-1]["live"] = True
+            except Exception as e:
+                print(f"⚠️ 盤中判斷失敗: {e}")
 
             if not rows:
                 raise ValueError("解析後無有效收盤價歷史紀錄")

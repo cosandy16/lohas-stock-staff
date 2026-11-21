@@ -592,6 +592,9 @@ function regression(values) {
 
 function buildAnalysis(data, currentMode = (modelMode ? modelMode.value : "linear"), currentYears = (periodYears ? periodYears.value : "3.5")) {
   const years = (currentYears === "all") ? 10 : Number(currentYears);
+  // 盤中未完成的最後一筆 (live) 不納入迴歸與通道計算，只沿用已算好的線顯示，確保同日重複載入結果一致
+  const liveRow = (data.length > 1 && data[data.length - 1].live === true) ? data[data.length - 1] : null;
+  if (liveRow) data = data.slice(0, -1);
   const lastDate = new Date(data[data.length - 1].date);
   const cutoff = new Date(lastDate);
   cutoff.setDate(cutoff.getDate() - Math.round(years * 365));
@@ -612,7 +615,7 @@ function buildAnalysis(data, currentMode = (modelMode ? modelMode.value : "linea
 
   const fit = regression(points);
   // 近 20 個交易日平均成交量 (張，不含最後一筆即時資料)，供籌碼強弱判斷用
-  const volWindow = filtered.slice(-21, -1).map(p => Number(p.volume) || 0).filter(v => v > 0);
+  const volWindow = (liveRow ? filtered.slice(-20) : filtered.slice(-21, -1)).map(p => Number(p.volume) || 0).filter(v => v > 0);
   const avgVol = volWindow.length ? volWindow.reduce((a, b) => a + b, 0) / volWindow.length : 0;
   const analysisRows = points.map((p, idx) => {
     const midRaw = fit.intercept + fit.slope * p.x;
@@ -634,6 +637,29 @@ function buildAnalysis(data, currentMode = (modelMode ? modelMode.value : "linea
       bandWeeks: bandData[idx].bandWeeks
     };
   });
+  if (liveRow) {
+    const lastBase = analysisRows[analysisRows.length - 1];
+    const lx = (new Date(liveRow.date).getTime() - startTime) / 86400000;
+    const lmid = fit.intercept + fit.slope * lx;
+    const lconv = (v) => useLog ? Math.exp(v) : v;
+    analysisRows.push({
+      ...liveRow,
+      x: lx,
+      y: useLog ? Math.log(liveRow.close) : liveRow.close,
+      plus2: lconv(lmid + fit.sd * 2),
+      plus1: lconv(lmid + fit.sd),
+      mid: lconv(lmid),
+      minus1: lconv(lmid - fit.sd),
+      minus2: lconv(lmid - fit.sd * 2),
+      r2: fit.r2,
+      slope: fit.slope,
+      avgVol,
+      bandMid: lastBase.bandMid,
+      bandUpper: lastBase.bandUpper,
+      bandLower: lastBase.bandLower,
+      bandWeeks: lastBase.bandWeeks
+    });
+  }
   // 最新一筆附上通道狀態 (暫停買進 / 回補)，供建議標籤使用
   Object.assign(analysisRows[analysisRows.length - 1], computeBandState(analysisRows));
   return analysisRows;
@@ -895,7 +921,7 @@ async function loadMainChipData(symbol) {
 
 async function fetchLevelForWatchlist(symbol) {
   let finalSym = symbol.trim().toUpperCase();
-  if (!finalSym.includes(".") && /^\d+$/.test(finalSym)) finalSym += ".TW";
+  if (!finalSym.includes(".") && /^\d{4,6}[A-Z]?$/.test(finalSym)) finalSym += ".TW";
   
   const cleanCode = finalSym.replace(".TW", "").replace(".TWO", "");
   const mkt = finalSym.includes(".TWO") ? "two" : (finalSym.includes(".TW") ? "tw" : "us");
